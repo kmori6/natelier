@@ -8,6 +8,7 @@
 
 ## Speech Processing
 - speech classification (Speech Commands)
+- speech recognition (LibriSpeech, Libri-Light)
 
 ## Computer Vision
 - image classification (MNIST)
