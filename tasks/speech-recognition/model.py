@@ -111,7 +111,7 @@ class ASRTransformer(nn.Module):
         input_wav_lens: torch.Tensor,
         beam_size: int = 10,
         ctc_weight: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
 
         # encoder
         fs_pad, fs_lens = self.feature_extractor(input_wavs, input_wav_lens)
