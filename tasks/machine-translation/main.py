@@ -1,7 +1,6 @@
 import os
 import argparse
 from tqdm import tqdm
-from itertools import chain
 import sacrebleu
 from typing import Dict
 import torch
