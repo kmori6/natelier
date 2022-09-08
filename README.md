@@ -6,6 +6,7 @@
 - named entity recognition (CoNLL-2003)
 - question answering (SQuAD v1.1/v2.0)
 - text classification (GLUE)
+- text summarization (CNN/DailyMail)
 
 ## Speech Processing
 - speech classification (Speech Commands)
