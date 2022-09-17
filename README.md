@@ -14,6 +14,7 @@
 
 ## Computer Vision
 - image classification (MNIST)
+- semantic segmentation (PASCAL VOC)
 
 ## Reference
 - HuggingFace (https://github.com/huggingface/transformers)

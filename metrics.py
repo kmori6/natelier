@@ -45,3 +45,15 @@ def spearman_correlation(preds: torch.Tensor, labels: torch.Tensor) -> float:
 
 def ppl(loss: float) -> float:
     return np.exp(loss)
+
+
+def miou(preds: torch.Tensor, labels: torch.Tensor, ignore_id: int = -100) -> float:
+    confusion_matrix = sklearn.metrics.confusion_matrix(
+        labels[labels != ignore_id].view(-1).numpy(),
+        preds[labels != ignore_id].view(-1).numpy(),
+    )
+    true_positives = np.diag(confusion_matrix)
+    num_preds = confusion_matrix.sum(0)
+    num_labels = confusion_matrix.sum(1)
+    ious = true_positives / (num_labels + num_preds - true_positives)
+    return ious.sum() / (num_labels != 0).sum()
