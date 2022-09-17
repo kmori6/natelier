@@ -1,5 +1,6 @@
 # Neural Network Atelier
 ## Natural Language Processing
+- dialogue (DailyDialog)
 - language modeling (WikiText)
 - machine translation (IWSLT 2017)
 - multiple choice (SWAG)
