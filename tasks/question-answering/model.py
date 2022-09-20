@@ -2,31 +2,28 @@ from argparse import Namespace
 from typing import Dict, Any, List
 import torch
 import torch.nn as nn
-from transformers import AlbertModel, AlbertConfig
+from models.albert import AlbertModel
 from metrics import single_label_accuracy
 
 
 class QAAlbert(nn.Module):
     def __init__(self, args: Namespace):
         super().__init__()
-        self.config = AlbertConfig.from_pretrained(args.model_name)
-        self.encoder = AlbertModel.from_pretrained(
-            args.model_name, add_pooling_layer=False
-        )
-        self.classifier = nn.Linear(self.config.hidden_size, 2)
+        self.encoder = AlbertModel.from_pretrained()
+        self.classifier = nn.Linear(self.encoder.d_model, 2)
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        token_type_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        tokens: torch.Tensor,
+        masks: torch.Tensor,
+        segments: torch.Tensor,
         start_labels: torch.Tensor,
         end_labels: torch.Tensor,
     ) -> Dict[str, Any]:
 
-        hs_pad = self.encoder(input_ids, attention_mask, token_type_ids)[0]
-        logits = self.classifier(hs_pad)
+        hs = self.encoder(tokens, masks, segments)
+        logits = self.classifier(hs)
         start_logits = logits[:, :, 0]
         end_logits = logits[:, :, 1]
 
@@ -46,9 +43,9 @@ class QAAlbert(nn.Module):
 
     def answer(
         self,
-        input_ids: torch.Tensor = None,
-        token_type_ids: torch.Tensor = None,
-        attention_mask: torch.Tensor = None,
+        tokens: torch.Tensor = None,
+        masks: torch.Tensor = None,
+        segments: torch.Tensor = None,
         offset_mapping: torch.Tensor = None,
         beam_size: int = 5,
         threshold: float = 0.0,
@@ -56,16 +53,14 @@ class QAAlbert(nn.Module):
         ids: List[str] = None,
     ) -> List[Dict[str, Any]]:
 
-        hs_pad = self.encoder(
-            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
-        )[0]
-        logits = self.classifier(hs_pad)
+        hs = self.encoder(tokens, masks, segments)
+        logits = self.classifier(hs)
         start_logits = logits[:, :, 0]
         end_logits = logits[:, :, 1]
 
         # beam search
         all_preds = []
-        for batch_idx in range(input_ids.size(0)):
+        for batch_idx in range(tokens.size(0)):
             start_logit = start_logits[batch_idx]
             end_logit = end_logits[batch_idx]
             null_pred = {

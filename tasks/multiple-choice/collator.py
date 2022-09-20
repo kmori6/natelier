@@ -12,7 +12,7 @@ class MCBatchCollator:
         self.num_choices = args.num_choices
 
     def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        bs = len(batch)
+        batch_size = len(batch)
         all_sentences = [
             [[data["sentence"], data[f"choice{i}"]] for i in range(self.num_choices)]
             for data in batch
@@ -26,14 +26,12 @@ class MCBatchCollator:
             truncation=True,
             return_tensors="pt",
         )
-        encodings["input_ids"] = encodings["input_ids"].view(bs, self.num_choices, -1)
-        encodings["attention_mask"] = encodings["attention_mask"].view(
-            bs, self.num_choices, -1
-        )
-        encodings["token_type_ids"] = encodings["token_type_ids"].view(
-            bs, self.num_choices, -1
-        )
-        encodings["labels"] = torch.tensor(
-            [data["label"] for data in batch], dtype=torch.long
-        )
-        return {k: v for k, v in encodings.items()}
+        inputs = {
+            "tokens": encodings["input_ids"].view(batch_size, self.num_choices, -1),
+            "masks": encodings["attention_mask"].view(batch_size, self.num_choices, -1),
+            "segments": encodings["token_type_ids"].view(
+                batch_size, self.num_choices, -1
+            ),
+            "labels": torch.tensor([data["label"] for data in batch], dtype=torch.long),
+        }
+        return inputs

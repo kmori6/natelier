@@ -2,20 +2,17 @@ from argparse import Namespace
 import torch
 import torch.nn as nn
 from typing import Dict, Any
-from transformers import AlbertModel, AlbertConfig
+from models.albert import AlbertModel
 from metrics import single_label_accuracy, spearman_correlation
 
 
 class TCAlbert(nn.Module):
     def __init__(self, args: Namespace):
         super().__init__()
-        self.config = AlbertConfig.from_pretrained(args.model_name)
         self.num_labels = args.num_labels
         self.task = args.task
-        self.encoder = AlbertModel.from_pretrained(
-            args.model_name, add_pooling_layer=False
-        )
-        self.classifier = nn.Linear(self.config.hidden_size, self.num_labels)
+        self.encoder = AlbertModel.from_pretrained()
+        self.classifier = nn.Linear(self.encoder.d_model, self.num_labels)
         if args.task == "single_label_classification":
             self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
         else:
@@ -23,13 +20,13 @@ class TCAlbert(nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        token_type_ids: torch.Tensor,
+        tokens: torch.Tensor,
+        masks: torch.Tensor,
+        segments: torch.Tensor,
         labels: torch.Tensor,
     ) -> Dict[str, Any]:
 
-        hs_cls = self.encoder(input_ids, attention_mask, token_type_ids)[0][:, 0, :]
+        hs_cls = self.encoder(tokens, masks, segments)[:, 0, :]
         logits = self.classifier(hs_cls)
 
         stats = dict()

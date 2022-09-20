@@ -21,6 +21,11 @@ class QABatchCollator:
             padding=True,
             return_tensors="pt",
         )
+        inputs = {
+            "tokens": encodings["input_ids"],
+            "masks": encodings["attention_mask"],
+            "segments": encodings["token_type_ids"],
+        }
         start_labels, end_labels = [], []
         for batch_idx, offset_mapping in enumerate(encodings["offset_mapping"]):
             # no answer: cls token label
@@ -60,18 +65,18 @@ class QABatchCollator:
                             break
                     start_labels.append(start_label)
                     end_labels.append(end_label)
-        encodings.update(
+        inputs.update(
             start_labels=torch.tensor(start_labels, dtype=torch.long),
             end_labels=torch.tensor(end_labels, dtype=torch.long),
         )
         if self.return_references:
-            encodings.update(
+            inputs.update(
                 references=[
                     {"answers": data["answers"], "id": data["id"]} for data in batch
                 ],
                 contexts=[data["context"] for data in batch],
                 ids=[data["id"] for data in batch],
             )
-            return {k: v for k, v in encodings.items()}
+            return {k: v for k, v in inputs.items()}
         else:
-            return {k: v for k, v in encodings.items() if k != "offset_mapping"}
+            return {k: v for k, v in inputs.items() if k != "offset_mapping"}

@@ -20,10 +20,12 @@ class LMBatchCollator:
         # shift model inputs and labels
         # labels: input_ids[2:t]
         # inputs: input_ids[1:t-1]
-        encodings["labels"] = encodings["input_ids"].masked_fill(
-            encodings["attention_mask"] == 0, -100
-        )[:, 1:]
-        encodings["input_ids"] = encodings["input_ids"][:, :-1]
-        encodings["attention_mask"] = encodings["attention_mask"][:, :-1]
-        encodings["token_type_ids"] = encodings["token_type_ids"][:, :-1]
-        return {k: v for k, v in encodings.items()}
+        batch = {
+            "tokens": encodings["input_ids"][:, :-1],
+            "masks": encodings["attention_mask"][:, :-1],
+            "segments": encodings["token_type_ids"][:, :-1],
+            "labels": encodings["input_ids"].masked_fill(
+                encodings["attention_mask"] == 0, -100
+            )[:, 1:],
+        }
+        return batch

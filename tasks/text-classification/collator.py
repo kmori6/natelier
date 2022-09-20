@@ -20,8 +20,15 @@ class TCBatchCollator:
             truncation=True,
             return_tensors="pt",
         )
-        encodings["labels"] = torch.tensor(
-            [data["label"] for data in batch],
-            dtype=torch.float32 if isinstance(batch[0]["label"], float) else torch.long,
-        )
-        return {k: v for k, v in encodings.items()}
+        batch = {
+            "tokens": encodings["input_ids"],
+            "masks": encodings["attention_mask"],
+            "segments": encodings["token_type_ids"],
+            "labels": torch.tensor(
+                [data["label"] for data in batch],
+                dtype=torch.float32
+                if isinstance(batch[0]["label"], float)
+                else torch.long,
+            ),
+        }
+        return batch

@@ -18,7 +18,7 @@ class NERBatchCollator:
             is_split_into_words=True,
             return_tensors="pt",
         )
-        encodings["labels"] = torch.tensor(
+        labels = torch.tensor(
             [
                 [
                     batch[i]["labels"][word_id] if word_id is not None else -100
@@ -28,4 +28,10 @@ class NERBatchCollator:
             ],
             dtype=torch.long,
         )
-        return {k: v for k, v in encodings.items()}
+        batch = {
+            "tokens": encodings["input_ids"],
+            "masks": encodings["attention_mask"],
+            "segments": encodings["token_type_ids"],
+            "labels": labels
+        }
+        return batch
