@@ -19,4 +19,5 @@
 
 ## Reference
 - HuggingFace (https://github.com/huggingface/transformers)
+- fairseq (https://github.com/facebookresearch/fairseq)
 - ESPnet (https://github.com/espnet/espnet)

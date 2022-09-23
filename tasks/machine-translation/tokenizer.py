@@ -13,19 +13,19 @@ class NMTTokenizer:
         self.pad_token_id = self.tokenizer.pad_id()
 
     def __call__(self, text_list: List[str]) -> Dict[str, torch.Tensor]:
-        encodings = {"input_ids": [], "attention_mask": []}
+        encodings = {"tokens": [], "masks": []}
         for text in text_list:
-            input_ids = torch.tensor(self.encode(text), dtype=torch.long)
-            encodings["input_ids"].append(input_ids)
-            encodings["attention_mask"].append(input_ids.new_ones(len(input_ids)))
+            tokens = torch.tensor(self.encode(text), dtype=torch.long)
+            encodings["tokens"].append(tokens)
+            encodings["masks"].append(tokens.new_ones(len(tokens)))
         encodings = {
-            "input_ids": pad_sequence(
-                encodings["input_ids"],
+            "tokens": pad_sequence(
+                encodings["tokens"],
                 batch_first=True,
                 padding_value=self.pad_token_id,
             ),
-            "attention_mask": pad_sequence(
-                encodings["attention_mask"], batch_first=True, padding_value=0
+            "masks": pad_sequence(
+                encodings["masks"], batch_first=True, padding_value=0
             ),
         }
         return encodings

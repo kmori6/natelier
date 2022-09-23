@@ -19,10 +19,11 @@ def add_specific_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--test_ratio", default=None, type=int)
     parser.add_argument("--model_name", default="facebook/bart-base", type=str)
     parser.add_argument("--train_tokenizer", default=False, action="store_true")
-    parser.add_argument("--src_lang", default="en", type=str)
-    parser.add_argument("--tgt_lang", default="de", type=str)
+    parser.add_argument("--src_lang", default="de", type=str)
+    parser.add_argument("--tgt_lang", default="en", type=str)
     parser.add_argument("--vocab_size", default=1000, type=int)
     parser.add_argument("--beam_size", default=5, type=int)
+    parser.add_argument("--max_length", default=128, type=int)
 
 
 def test_steps(
@@ -30,6 +31,7 @@ def test_steps(
     test_dataloader: DataLoader,
     device: torch.device,
     beam_size: int,
+    max_length: int,
     tokenizer: NMTTokenizer,
 ) -> Dict[str, float]:
 
@@ -39,8 +41,9 @@ def test_steps(
     for batch in tqdm(test_dataloader):
         with torch.no_grad():
             preds_token = model.translate(
-                src_input_ids=batch["input_ids"].to(device),
+                tokens=batch["tokens"].to(device),
                 beam_size=beam_size,
+                max_length=max_length,
             )["tokens"]
         preds_text = tokenizer.decode(preds_token)
         labels_text = tokenizer.decode(batch["labels"][0].tolist())
@@ -104,6 +107,7 @@ def main():
             NMTBatchCollator(args, tokenizer, return_test_encodings=True),
             test_steps,
             beam_size=args.beam_size,
+            max_length=args.max_length,
             tokenizer=tokenizer,
         )
 

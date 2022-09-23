@@ -25,6 +25,7 @@ def test_steps(
     test_dataloader: DataLoader,
     device: torch.device,
     beam_size: int,
+    max_length: int,
     tokenizer: PreTrainedTokenizerFast,
 ) -> Dict[str, float]:
 
@@ -32,11 +33,12 @@ def test_steps(
     test_stats = dict()
     all_preds, all_labels = [], []
     for batch in tqdm(test_dataloader):
-        for utt_idx in range(batch["input_ids"].size(0)):
+        for utt_idx in range(batch["tokens"].size(0)):
             with torch.no_grad():
                 preds_token = model.response(
-                    src_input_ids=batch["input_ids"][utt_idx].unsqueeze(0).to(device),
+                    src_input_ids=batch["tokens"][utt_idx].unsqueeze(0).to(device),
                     beam_size=beam_size,
+                    max_length=max_length,
                 )["tokens"]
             preds_text = tokenizer.decode(preds_token, skip_special_tokens=True)
             labels_text = tokenizer.decode(
@@ -85,6 +87,7 @@ def main():
             DBatchCollator(args, return_test_encodings=True),
             test_steps,
             beam_size=args.beam_size,
+            max_length=args.max_length,
             tokenizer=AutoTokenizer.from_pretrained(args.model_name),
         )
 
