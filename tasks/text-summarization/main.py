@@ -17,6 +17,7 @@ def add_specific_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--train_ratio", default=None, type=int)
     parser.add_argument("--test_ratio", default=None, type=int)
     parser.add_argument("--model_name", default="facebook/bart-base", type=str)
+    parser.add_argument("--vocab_size", default=50265, type=int)
     parser.add_argument("--beam_size", default=5, type=int)
     parser.add_argument("--max_length", default=512, type=int)
 

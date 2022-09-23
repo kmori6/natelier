@@ -27,23 +27,23 @@ class TSBatchCollator:
         )
         if self.return_test_encodings:
             return {
-                "tokens": src_encodings["tokens"],
-                "labels": tgt_encodings["tokens"].masked_fill(
-                    tgt_encodings["masks"] == 0, -100
+                "tokens": src_encodings["input_ids"],
+                "labels": tgt_encodings["input_ids"].masked_fill(
+                    tgt_encodings["attention_mask"] == 0, -100
                 ),
             }
         else:
-            masks = tgt_encodings["tokens"][:, :-1]
+            masks = tgt_encodings["attention_mask"][:, :-1]
             batch_size, length = masks.size()
             masks = torch.tril(
                 masks.repeat_interleave(length, 0).view(batch_size, length, length)
             )
             return {
-                "encoder_tokens": src_encodings["tokens"],
-                "encoder_masks": src_encodings["masks"],
-                "decoder_tokens": tgt_encodings["tokens"][:, :-1],
+                "encoder_tokens": src_encodings["input_ids"],
+                "encoder_masks": src_encodings["attention_mask"],
+                "decoder_tokens": tgt_encodings["input_ids"][:, :-1],
                 "decoder_masks": masks,
-                "labels": tgt_encodings["tokens"].masked_fill(
-                    tgt_encodings["masks"] == 0, -100
+                "labels": tgt_encodings["input_ids"].masked_fill(
+                    tgt_encodings["attention_mask"] == 0, -100
                 )[:, 1:],
             }

@@ -9,7 +9,9 @@ from metrics import tokens_accuracy
 class TSBart(nn.Module):
     def __init__(self, args: Namespace):
         super().__init__()
+        self.vocab_size = args.vocab_size
         self.model = BartModel.from_pretrained()
+        self.model.initialize_embeddings(args.vocab_size)
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
@@ -24,7 +26,7 @@ class TSBart(nn.Module):
         logits = self.model(
             encoder_tokens, encoder_masks, decoder_tokens, decoder_masks
         )
-        loss = self.loss_fn(logits.view(-1, self.model.vocab_size), labels.view(-1))
+        loss = self.loss_fn(logits.view(-1, self.vocab_size), labels.view(-1))
         stats = {"loss": loss.item(), "acc": tokens_accuracy(logits.argmax(-1), labels)}
 
         return {"loss": loss, "logits": logits, "stats": stats}
