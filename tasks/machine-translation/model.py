@@ -11,19 +11,8 @@ class NMTBart(nn.Module):
         super().__init__()
         self.vocab_size = args.vocab_size
         self.model = BartModel.from_pretrained()
-        self.initialize_embeddings(args.vocab_size)
+        self.model.initialize_embeddings(args.vocab_size)
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
-
-    def initialize_embeddings(self, vocab_size: int):
-        common_token_embedding = nn.Embedding(
-            vocab_size, self.model.d_model, self.model.padding_id
-        )
-        self.model.encoder.embed_tokens = common_token_embedding
-        self.model.decoder.embed_tokens = common_token_embedding
-        self.model.decoder.classifier = nn.Linear(
-            self.model.d_model, vocab_size, bias=False
-        )
-        self.model.decoder.classifier.weight = common_token_embedding.weight
 
     def forward(
         self,
