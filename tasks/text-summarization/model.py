@@ -1,6 +1,7 @@
 from argparse import Namespace
 import torch
 import torch.nn as nn
+from transformers import BartModel as HuggingFaceBartModel
 from models.bart import BartModel
 from typing import Any, Dict
 from metrics import tokens_accuracy
@@ -11,7 +12,7 @@ class TSBart(nn.Module):
         super().__init__()
         self.vocab_size = args.vocab_size
         self.model = BartModel.from_pretrained()
-        self.model.initialize_embeddings(args.vocab_size)
+        self.initialize_embeddings(args.vocab_size)
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
@@ -30,6 +31,16 @@ class TSBart(nn.Module):
         stats = {"loss": loss.item(), "acc": tokens_accuracy(logits.argmax(-1), labels)}
 
         return {"loss": loss, "logits": logits, "stats": stats}
+
+    def initialize_embeddings(self, vocab_size: int):
+        hf_model = HuggingFaceBartModel.from_pretrained("facebook/bart-base")
+        common_token_embedding = hf_model.shared
+        self.model.encoder.embed_tokens = common_token_embedding
+        self.model.decoder.embed_tokens = common_token_embedding
+        self.model.decoder.classifier = nn.Linear(
+            self.model.d_model, vocab_size, bias=False
+        )
+        self.model.decoder.classifier.weight = common_token_embedding.weight
 
     def summarize(
         self, tokens: torch.Tensor, beam_size: int, max_length: int
