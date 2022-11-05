@@ -1,88 +1,62 @@
 from argparse import Namespace
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any
 import numpy as np
 import torch
 import torch.nn as nn
-from espnet2.asr.frontend.default import DefaultFrontend
-from espnet2.asr.specaug.specaug import SpecAug
-from espnet2.layers.utterance_mvn import UtteranceMVN
-from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
-from espnet2.asr.decoder.transformer_decoder import TransformerDecoder
+from models.distilhubert import DistilhubertModel
+from models.transformer import Decoder as TransformerDecoder
 from espnet.nets.ctc_prefix_score import CTCPrefixScore
+from loss.cross_entropy import CrossEntropyLoss
 from metrics import tokens_accuracy
 
 
-class ASRTransformer(nn.Module):
+class ASRDistilhubert(nn.Module):
     def __init__(self, args: Namespace):
         super().__init__()
         self.bos_token_id = args.vocab_size - 1
         self.eos_token_id = args.vocab_size - 1
         self.vocab_size = args.vocab_size
         self.ctc_loss_weight = args.ctc_loss_weight
-
-        self.feature_extractor = DefaultFrontend()
-        self.spec_augmentor = SpecAug(
-            time_warp_window=args.specaug_time_warp_window,
-            time_warp_mode=args.specaug_time_warp_mode,
-            freq_mask_width_range=args.specaug_freq_mask_width_range,
-            num_freq_mask=args.specaug_num_freq_mask,
-            time_mask_width_range=args.specaug_time_mask_width_range,
-            num_time_mask=args.specaug_num_time_mask,
-        )
-        self.normalizer = UtteranceMVN(norm_means=True, norm_vars=True)
-        self.encoder = TransformerEncoder(
-            input_size=self.feature_extractor.output_size(),
-            output_size=args.hidden_size,
-            attention_heads=args.encoder_attention_heads,
-            linear_units=args.encoder_linear_units,
-            num_blocks=args.encoder_num_blocks,
-            dropout_rate=args.encoder_dropout_rate,
-            positional_dropout_rate=args.encoder_positional_dropout_rate,
-            attention_dropout_rate=args.encoder_attention_dropout_rate,
-            input_layer=args.encoder_input_layer,
-        )
+        self.encoder = DistilhubertModel.from_pretrained()
         self.decoder = TransformerDecoder(
             vocab_size=args.vocab_size,
-            encoder_output_size=args.hidden_size,
-            attention_heads=args.decoder_attention_heads,
-            linear_units=args.decoder_linear_units,
-            num_blocks=args.decoder_num_blocks,
+            d_model=args.hidden_size,
+            num_attention_heads=args.decoder_attention_heads,
+            d_ff=args.decoder_feedforward_hidden_size,
+            num_layers=args.decoder_layers,
             dropout_rate=args.decoder_dropout_rate,
-            positional_dropout_rate=args.decoder_positional_dropout_rate,
-            self_attention_dropout_rate=args.decoder_self_attention_dropout_rate,
-            src_attention_dropout_rate=args.decoder_src_attention_dropout_rate,
         )
         self.ctc_classifier = nn.Linear(args.hidden_size, args.vocab_size)
         self.ctc_loss_fn = nn.CTCLoss(reduction="sum", zero_infinity=True)
-        self.att_loss_fn = nn.CrossEntropyLoss(
-            reduction="sum", label_smoothing=args.label_smoothing
-        )
+        self.att_loss_fn = CrossEntropyLoss("sum", args.label_smoothing)
+
+        self.encoder.freeze_convolution()
 
     def forward(
         self,
-        input_wavs: torch.Tensor,
-        input_wav_lens: torch.Tensor,
+        encoder_waves: torch.Tensor,
+        encoder_wave_lens: torch.Tensor,
         encoder_labels: torch.Tensor,
         encoder_label_lens: torch.Tensor,
-        decoder_input_ids: torch.Tensor,
+        decoder_tokens: torch.Tensor,
+        decoder_masks: torch.Tensor,
         decoder_labels: torch.Tensor,
     ) -> Dict[str, Any]:
 
         # encoder
-        fs_pad, fs_lens = self.feature_extractor(input_wavs, input_wav_lens)
-        fs_pad, fs_lens = self.spec_augmentor(fs_pad, fs_lens)
-        fs_pad, fs_lens = self.normalizer(fs_pad, fs_lens)
-        hs_pad, hs_lens, _ = self.encoder(fs_pad, fs_lens)
+        encoder_hs, encoder_hs_lens, encoder_masks = self.encoder(
+            encoder_waves, encoder_wave_lens
+        )
 
         # ctc
         stats = dict()
         if self.ctc_loss_weight != 0.0:
-            ctc_logits = self.ctc_classifier(hs_pad).transpose(0, 1)  # (T, B, C)
+            ctc_logits = self.ctc_classifier(encoder_hs).transpose(0, 1)  # (T, B, C)
             ctc_log_probs = torch.log_softmax(ctc_logits, dim=-1)
-            encoder_labels = encoder_labels[encoder_labels >= 0]
+            encoder_labels = encoder_labels[encoder_labels >= 0]  # ignore -100 tokens
             loss_ctc = self.ctc_loss_fn(
-                ctc_log_probs, encoder_labels, hs_lens, encoder_label_lens
-            ) / input_wavs.size(0)
+                ctc_log_probs, encoder_labels, encoder_hs_lens, encoder_label_lens
+            ) / encoder_waves.size(0)
             stats["loss_ctc"] = loss_ctc.item()
         else:
             loss_ctc = 0
@@ -90,11 +64,11 @@ class ASRTransformer(nn.Module):
         # decoder
         if self.ctc_loss_weight != 1.0:
             att_logits = self.decoder(
-                hs_pad, hs_lens, decoder_input_ids, encoder_label_lens + 1
-            )[0]
+                decoder_tokens, decoder_masks, encoder_hs, encoder_masks
+            )
             loss_att = self.att_loss_fn(
                 att_logits.view(-1, self.vocab_size), decoder_labels.view(-1)
-            ) / input_wavs.size(0)
+            ) / encoder_waves.size(0)
             stats["loss_att"] = loss_att.item()
             stats["att_acc"] = tokens_accuracy(att_logits.argmax(-1), decoder_labels)
         else:
@@ -107,18 +81,20 @@ class ASRTransformer(nn.Module):
 
     def recognize(
         self,
-        input_wavs: torch.Tensor,
-        input_wav_lens: torch.Tensor,
+        encoder_input_waves: torch.Tensor,
+        encoder_input_wave_lens: torch.Tensor,
         beam_size: int = 10,
         ctc_weight: float = 0.3,
     ) -> Dict[str, Any]:
 
         # encoder
-        fs_pad, fs_lens = self.feature_extractor(input_wavs, input_wav_lens)
+        fs_pad, fs_lens = self.feature_extractor(
+            encoder_input_waves, encoder_input_wave_lens
+        )
         fs_pad, fs_lens = self.normalizer(fs_pad, fs_lens)
-        hs_pad = self.encoder(fs_pad, fs_lens)[0]
+        hs = self.encoder(fs_pad, fs_lens)[0]
         self.ctc_prefix_score = CTCPrefixScore(
-            torch.log_softmax(self.ctc_classifier(hs_pad), dim=-1)[0].cpu().numpy(),
+            torch.log_softmax(self.ctc_classifier(hs), dim=-1)[0].cpu().numpy(),
             blank=0,
             eos=self.eos_token_id,
             xp=np,
@@ -136,16 +112,16 @@ class ASRTransformer(nn.Module):
         final_stats = []
 
         # beam search
-        max_length = hs_pad.size(1)
+        max_length = hs.size(1)
         for i in range(1, max_length):
             # decoder
-            decoder_input_ids = fs_lens.new_zeros(beam_size, i)
+            decoder_input_tokens = fs_lens.new_zeros(beam_size, i)
             for beam_idx, stat in enumerate(running_stats):
-                decoder_input_ids[beam_idx, :] = fs_lens.new_tensor(stat["tokens"])
+                decoder_input_tokens[beam_idx, :] = fs_lens.new_tensor(stat["tokens"])
             next_token_scores = self.decoder.forward_one_step(
-                decoder_input_ids,
+                decoder_input_tokens,
                 fs_lens.new_ones(beam_size, i, i).tril(0),
-                hs_pad.repeat_interleave(beam_size, dim=0),
+                hs.repeat_interleave(beam_size, dim=0),
             )[0]
             # scoring
             aggregator = []

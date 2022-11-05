@@ -5,8 +5,8 @@ from typing import Dict
 import torch
 from torch.utils.data import DataLoader, Subset
 from jiwer import compute_measures
+from model import ASRDistilhubert
 from data import LibriDataset
-from model import ASRTransformer
 from train import train
 from test import test
 from collator import ASRBatchCollator
@@ -22,31 +22,12 @@ def add_specific_arguments(parser):
     parser.add_argument("--train_subset", default="train-10h", type=str)
     parser.add_argument("--dev_subset", default="dev-clean", type=str)
     parser.add_argument("--test_subset", default="test-clean", type=str)
-    # specaug
-    parser.add_argument("--specaug_time_warp_window", default=5, type=int)
-    parser.add_argument("--specaug_time_warp_mode", default="bicubic", type=str)
-    parser.add_argument("--specaug_num_time_mask", default=2, type=int)
-    parser.add_argument("--specaug_num_freq_mask", default=2, type=int)
-    parser.add_argument("--specaug_time_mask_width_range", default=40, type=int)
-    parser.add_argument("--specaug_freq_mask_width_range", default=30, type=int)
     # model
-    parser.add_argument("--hidden_size", default=256, type=int)
-    parser.add_argument("--encoder_attention_heads", default=4, type=int)
-    parser.add_argument("--encoder_linear_units", default=2048, type=int)
-    parser.add_argument("--encoder_num_blocks", default=12, type=int)
-    parser.add_argument("--encoder_dropout_rate", default=0.1, type=float)
-    parser.add_argument("--encoder_positional_dropout_rate", default=0.1, type=float)
-    parser.add_argument("--encoder_attention_dropout_rate", default=0.1, type=float)
-    parser.add_argument("--encoder_input_layer", default="conv2d", type=str)
-    parser.add_argument("--decoder_attention_heads", default=4, type=int)
-    parser.add_argument("--decoder_linear_units", default=2048, type=int)
-    parser.add_argument("--decoder_num_blocks", default=6, type=int)
+    parser.add_argument("--hidden_size", default=768, type=int)
+    parser.add_argument("--decoder_attention_heads", default=12, type=int)
+    parser.add_argument("--decoder_feedforward_hidden_size", default=3072, type=int)
+    parser.add_argument("--decoder_layers", default=1, type=int)
     parser.add_argument("--decoder_dropout_rate", default=0.1, type=float)
-    parser.add_argument("--decoder_positional_dropout_rate", default=0.1, type=float)
-    parser.add_argument(
-        "--decoder_self_attention_dropout_rate", default=0.1, type=float
-    )
-    parser.add_argument("--decoder_src_attention_dropout_rate", default=0.1, type=float)
     parser.add_argument("--ctc_loss_weight", default=0.3, type=float)
     # decode
     parser.add_argument("--beam_size", default=10, type=int)
@@ -104,7 +85,7 @@ def main():
         tokenizer = ASRTokenizer.build_from_dataset(args, train_dataset)
         train(
             args,
-            ASRTransformer,
+            ASRDistilhubert,
             train_dataset,
             dev_dataset,
             ASRBatchCollator(tokenizer),
@@ -116,7 +97,7 @@ def main():
         tokenizer = ASRTokenizer.load_from_args(args)
         test(
             args,
-            ASRTransformer,
+            ASRDistilhubert,
             test_dataset,
             ASRBatchCollator(tokenizer, return_transcript=True),
             test_steps,
