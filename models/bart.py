@@ -264,8 +264,8 @@ class BartModel(nn.Module):
 
     def initialize_embeddings(self, vocab_size: int):
         common_token_embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
-        self.encoder.embed_tokens = common_token_embedding
-        self.decoder.embed_tokens = common_token_embedding
+        self.encoder.embedding.token_embedding = common_token_embedding
+        self.decoder.embedding.token_embedding = common_token_embedding
         self.decoder.classifier = nn.Linear(self.d_model, vocab_size, bias=False)
         self.decoder.classifier.weight = common_token_embedding.weight
 
