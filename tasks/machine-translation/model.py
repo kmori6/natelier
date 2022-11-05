@@ -1,18 +1,19 @@
 from argparse import Namespace
 import torch
 import torch.nn as nn
-from models.bart import BartModel
+from models.mbart import MbartModel
 from typing import Any, Dict
 from metrics import tokens_accuracy
+from loss.cross_entropy import CrossEntropyLoss
 
 
 class NMTBart(nn.Module):
     def __init__(self, args: Namespace):
         super().__init__()
         self.vocab_size = args.vocab_size
-        self.model = BartModel.from_pretrained()
+        self.model = MbartModel.from_pretrained()
         self.model.initialize_embeddings(args.vocab_size)
-        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
+        self.loss_fn = CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
         self,

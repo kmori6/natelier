@@ -17,7 +17,7 @@ from utils import add_base_arguments, set_logging, set_reproducibility
 def add_specific_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--dataset", default="iwslt2017-en-de", type=str)
     parser.add_argument("--test_ratio", default=None, type=int)
-    parser.add_argument("--model_name", default="facebook/bart-base", type=str)
+    parser.add_argument("--model_name", default="facebook/mbart-large-cc25", type=str)
     parser.add_argument("--train_tokenizer", default=False, action="store_true")
     parser.add_argument("--src_lang", default="de", type=str)
     parser.add_argument("--tgt_lang", default="en", type=str)
@@ -85,9 +85,17 @@ def main():
                 for data in train_dataset:
                     f.write(data["src_text"] + "\n" + data["tgt_text"] + "\n")
             NMTTokenizer.train_tokenizer(
-                text_file, args.vocab_size, args.out_dir + "/tokenizer"
+                text_file,
+                vocab_size=args.vocab_size - 2,
+                out_dir=args.out_dir + "/tokenizer",
+                src_lang=args.src_lang,
+                tgt_lang=args.tgt_lang,
             )
-        tokenizer = NMTTokenizer(args.out_dir + "/tokenizer/tokenizer.model")
+        tokenizer = NMTTokenizer(
+            args.out_dir + "/tokenizer/tokenizer.model",
+            src_lang_token=f"<{args.src_lang}>",
+            tgt_lang_token=f"<{args.tgt_lang}>",
+        )
         train(
             args,
             NMTBart,
