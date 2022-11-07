@@ -6,8 +6,8 @@ from datasets import load_dataset
 
 class Iwslt2017Dataset(Dataset):
     def __init__(self, args: Namespace, split: str):
-        self.src_lang = args.src_lang
-        self.tgt_lang = args.tgt_lang
+        self.src_lang = args.src_lang.split("_")[0]
+        self.tgt_lang = args.tgt_lang.split("_")[0]
         datasets = load_dataset("iwslt2017", args.dataset)
         if split == "train":
             self.dataset = datasets["train"]

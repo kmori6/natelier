@@ -12,7 +12,7 @@ class NMTBart(nn.Module):
         super().__init__()
         self.vocab_size = args.vocab_size
         self.model = MbartModel.from_pretrained()
-        self.model.initialize_embeddings(args.vocab_size)
+        self.model.freeze_embeddings()
         self.loss_fn = CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
