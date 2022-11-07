@@ -270,6 +270,14 @@ class MbartModel(nn.Module):
             output_embedding=common_token_embedding,
         )
 
+    def freeze_embeddings(self):
+        for p in self.encoder.embedding.token_embedding.parameters():
+            p.requires_grad = False
+        for p in self.decoder.embedding.token_embedding.parameters():
+            p.requires_grad = False
+        for p in self.decoder.classifier.parameters():
+            p.requires_grad = False
+
     def initialize_embeddings(self, vocab_size: int):
         common_token_embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
         self.encoder.embedding.token_embedding = common_token_embedding
