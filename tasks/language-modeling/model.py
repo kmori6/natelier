@@ -11,8 +11,16 @@ class LMAlbert(nn.Module):
         super().__init__()
         self.encoder = AlbertModel.from_pretrained()
         self.vocab_size = self.encoder.vocab_size
-        self.classifier = nn.Linear(self.encoder.d_model, self.vocab_size)
+        self.classifier = nn.Sequential(
+            nn.Linear(self.encoder.d_model, self.encoder.embedding_size),
+            nn.Linear(self.encoder.embedding_size, self.vocab_size, bias=False),
+        )
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
+
+        self.initialize_classifier()
+
+    def initialize_classifier(self):
+        self.classifier[1].weight = self.encoder.embedding.token_embedding.weight
 
     def forward(
         self,
