@@ -1,10 +1,7 @@
-from typing import Tuple
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-from .modules.factorized_embedding import FactorizedEmbedding
-from .modules.multi_head_attention import MultiHeadAttention
-from .modules.feed_forward import FeedForward
+from .transformer import Embedding, EncoderLayer
 from transformers import AlbertModel as PretrainedModel
 
 KEY_DICT = {
@@ -38,29 +35,36 @@ KEY_DICT = {
 }
 
 
-class EncoderLayer(nn.Module):
+class FactorizedEmbedding(Embedding):
     def __init__(
-        self, d_model: int, d_ff: int, num_attention_heads: int, dropout_rate: float
+        self,
+        vocab_size: int,
+        position_size: int,
+        embedding_size: int,
+        d_model: int,
+        dropout_rate: float,
+        padding_id: int,
     ):
-        super().__init__()
-        self.mha = MultiHeadAttention(d_model, num_attention_heads, dropout_rate)
-        self.ff = FeedForward(d_model, d_ff)
-        self.mha_norm = nn.LayerNorm(d_model)
-        self.ff_norm = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout_rate)
+        super().__init__(vocab_size, d_model, padding_id, dropout_rate)
+        self.padding_id = padding_id
+        self.token_embedding = nn.Embedding(vocab_size, embedding_size, padding_id)
+        self.segment_embedding = nn.Embedding(2, embedding_size)
+        self.position_embedding = nn.Embedding(position_size, embedding_size)
+        self.embedding_norm = nn.LayerNorm(embedding_size)
+        self.embedding_projection = nn.Linear(embedding_size, d_model)
 
-    def forward(
-        self, hs: torch.Tensor, masks: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # multi-head attention
-        shortcut = hs
-        hs = self.dropout(self.mha(hs, hs, hs, masks))
-        hs = self.mha_norm(shortcut + hs)
-        # feed-forward
-        shortcut = hs
-        hs = self.dropout(self.ff(hs))
-        hs = self.ff_norm(shortcut + hs)
-        return hs, masks
+    def forward(self, tokens: torch.Tensor, segments: torch.Tensor) -> torch.Tensor:
+        token_embedding = self.token_embedding(tokens)
+        segment_embedding = self.segment_embedding(segments)
+
+        length = tokens.size(1)
+        positions = torch.arange(length, dtype=torch.long, device=tokens.device)
+        position_embedding = self.position_embedding(positions.unsqueeze(0))  # (1, L)
+
+        hs = token_embedding + segment_embedding + position_embedding
+        hs = self.embedding_norm(hs)
+        hs = self.dropout(hs)
+        return self.embedding_projection(hs)
 
 
 class AlbertModel(nn.Module):
@@ -75,16 +79,27 @@ class AlbertModel(nn.Module):
         num_layers: int = 12,
         dropout_rate: float = 0.0,
         padding_id: int = 0,
+        ff_activation: nn.Module = nn.GELU(),
     ):
         super().__init__()
         self.d_model = d_model
+        self.embedding_size = embedding_size
         self.vocab_size = vocab_size
         self.num_layers = num_layers
         self.embedding = FactorizedEmbedding(
-            vocab_size, position_size, embedding_size, d_model, dropout_rate, padding_id
+            vocab_size=vocab_size,
+            position_size=position_size,
+            embedding_size=embedding_size,
+            d_model=d_model,
+            dropout_rate=dropout_rate,
+            padding_id=padding_id,
         )
         self.shared_layer = EncoderLayer(
-            d_model, d_ff, num_attention_heads, dropout_rate
+            d_model=d_model,
+            d_ff=d_ff,
+            num_attention_heads=num_attention_heads,
+            dropout_rate=dropout_rate,
+            ff_activation=ff_activation,
         )
 
     def forward(
