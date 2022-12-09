@@ -252,7 +252,7 @@ class Decoder(nn.Module):
         return hs
 
 
-class Transformer(nn.Module):
+class TransformerModel(nn.Module):
     def __init__(
         self,
         vocab_size: int,
