@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict, Any
 import numpy as np
 import torch
 import torch.nn as nn
@@ -250,3 +250,121 @@ class Decoder(nn.Module):
             )
         hs = self.classifier(hs)
         return hs
+
+
+class Transformer(nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        d_model: int = 512,
+        d_ff: int = 2048,
+        num_attention_heads: int = 8,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 1,
+        dropout_rate: float = 0.0,
+        padding_id: int = 0,
+        bos_id: int = 1,
+        eos_id: int = 2,
+    ):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.bos_id = bos_id
+        self.eos_id = eos_id
+        self.padding_id = padding_id
+        self.encoder = Encoder(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            d_ff=d_ff,
+            num_attention_heads=num_attention_heads,
+            num_layers=num_encoder_layers,
+            dropout_rate=dropout_rate,
+            padding_id=padding_id,
+            ff_activation=nn.RELU(),
+        )
+        self.decoder = Decoder(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            d_ff=d_ff,
+            num_attention_heads=num_attention_heads,
+            num_layers=num_decoder_layers,
+            dropout_rate=dropout_rate,
+            padding_id=padding_id,
+            ff_activation=nn.RELU(),
+        )
+
+    def forward(
+        self,
+        encoder_tokens: torch.Tensor,
+        encoder_masks: torch.Tensor,
+        decoder_tokens: torch.Tensor,
+        decoder_masks: torch.Tensor,
+    ):
+        encoder_hs, encoder_masks = self.encoder(encoder_tokens, encoder_masks)
+        logits = self.decoder(decoder_tokens, decoder_masks, encoder_hs, encoder_masks)
+        return logits
+
+    def decode(
+        self,
+        tokens: torch.Tensor,
+        beam_size: int = 5,
+        max_length: int = 128,
+    ) -> Dict[str, Any]:
+
+        # initial stats
+        running_stats = [{"score": 0.0, "tokens": [self.bos_id]}]
+        final_stats = []
+
+        # encoder forward
+        encoder_inputs = tokens.repeat_interleave(beam_size, dim=0)
+        encoder_masks = torch.ones_like(encoder_inputs)
+        encoder_hs, encoder_masks = self.encoder(encoder_inputs, encoder_masks)
+
+        # beam search
+        for i in range(1, max_length):
+
+            # decoder forward
+            decoder_tokens = tokens.new_zeros(beam_size, i)
+            for beam_idx, stat in enumerate(running_stats):
+                decoder_tokens[beam_idx, :] = tokens.new_tensor(stat["tokens"])
+            decoder_masks = decoder_tokens.new_ones(beam_size, i, i).tril()
+            logits = self.decoder(
+                decoder_tokens, decoder_masks, encoder_hs, encoder_masks
+            )
+            next_token_scores = torch.log_softmax(logits[:, -1, :], dim=-1)  # (B, D)
+
+            # scoring
+            aggregator = []
+            for beam_idx, stat in enumerate(running_stats):
+                next_scores, next_tokens = torch.topk(
+                    next_token_scores[beam_idx], beam_size
+                )
+                for topk_idx in range(beam_size):
+                    candidate = {
+                        "score": stat["score"] + next_scores[topk_idx].item(),
+                        "tokens": stat["tokens"] + [next_tokens[topk_idx].item()],
+                    }
+                    aggregator.append(candidate)
+            running_stats = sorted(aggregator, key=lambda x: x["score"], reverse=True)[
+                :beam_size
+            ]
+
+            # add eos_token_id
+            if i == max_length - 1:
+                for stat in running_stats:
+                    stat["tokens"].append(self.eos_id)
+
+            # sort stats
+            keep_stats = []
+            for stat in running_stats:
+                if stat["tokens"][-1] == self.eos_id:
+                    final_stats.append(stat)
+                else:
+                    keep_stats.append(stat)
+            running_stats = keep_stats
+
+            # stop search
+            if len(running_stats) < 1 or len(final_stats) >= beam_size:
+                break
+
+        return sorted(final_stats, key=lambda x: x["score"], reverse=True)[0]
