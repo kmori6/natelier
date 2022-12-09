@@ -1,7 +1,7 @@
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-from .transformer import Embedding, EncoderLayer
+from .transformer import Embedding, EncoderLayer, Encoder
 from transformers import AlbertModel as PretrainedModel
 
 KEY_DICT = {
@@ -67,7 +67,7 @@ class FactorizedEmbedding(Embedding):
         return self.embedding_projection(hs)
 
 
-class AlbertModel(nn.Module):
+class AlbertModel(Encoder):
     def __init__(
         self,
         vocab_size: int = 30000,
@@ -81,7 +81,16 @@ class AlbertModel(nn.Module):
         padding_id: int = 0,
         ff_activation: nn.Module = nn.GELU(),
     ):
-        super().__init__()
+        super().__init__(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            d_ff=d_ff,
+            num_attention_heads=num_attention_heads,
+            num_layers=num_layers,
+            dropout_rate=dropout_rate,
+            padding_id=padding_id,
+            ff_activation=ff_activation,
+        )
         self.d_model = d_model
         self.embedding_size = embedding_size
         self.vocab_size = vocab_size
@@ -94,7 +103,7 @@ class AlbertModel(nn.Module):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
         )
-        self.shared_layer = EncoderLayer(
+        self.layers = EncoderLayer(
             d_model=d_model,
             d_ff=d_ff,
             num_attention_heads=num_attention_heads,
@@ -107,7 +116,7 @@ class AlbertModel(nn.Module):
     ) -> torch.Tensor:
         hs = self.embedding(tokens, segments)
         for _ in range(self.num_layers):
-            hs, masks = self.shared_layer(hs, masks)
+            hs, masks = self.layers(hs, masks)
         return hs
 
     @classmethod
@@ -122,7 +131,7 @@ class AlbertModel(nn.Module):
             module, sub_module = k.split(".")[:2]
             if module == "encoder" and sub_module == "albert_layer_groups":
                 sub_module = k.split(".", 5)[-1]
-                tgt_key = f"shared_layer.{KEY_DICT[module][sub_module]}"
+                tgt_key = f"layers.{KEY_DICT[module][sub_module]}"
             else:
                 sub_module = k.split(".", 1)[-1]
                 tgt_key = KEY_DICT[module][sub_module]
