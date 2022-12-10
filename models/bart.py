@@ -77,9 +77,14 @@ class LearnableEmbedding(Embedding):
         padding_id: int,
         token_embedding: nn.Embedding,
     ):
-        super().__init__(vocab_size, d_model, padding_id, dropout_rate)
+        super().__init__(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            padding_id=padding_id,
+            dropout_rate=dropout_rate,
+            token_embedding=token_embedding,
+        )
         self.padding_id = padding_id
-        self.token_embedding = token_embedding
         self.position_embedding = nn.Embedding(position_size, d_model, padding_id)
         self.embedding_norm = nn.LayerNorm(d_model)
 
@@ -105,7 +110,7 @@ class LearnableEmbedding(Embedding):
         return self.position_embedding(positions)
 
 
-class Encoder(Encoder):
+class BartEncoder(Encoder):
     def __init__(
         self,
         vocab_size: int,
@@ -117,7 +122,7 @@ class Encoder(Encoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        input_embedding: nn.Embedding,
+        token_embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -128,6 +133,7 @@ class Encoder(Encoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
+            token_embedding=token_embedding,
         )
         self.embedding = LearnableEmbedding(
             vocab_size=vocab_size,
@@ -135,11 +141,11 @@ class Encoder(Encoder):
             d_model=d_model,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            token_embedding=input_embedding,
+            token_embedding=token_embedding,
         )
 
 
-class Decoder(Decoder):
+class BartDecoder(Decoder):
     def __init__(
         self,
         vocab_size: int,
@@ -151,7 +157,7 @@ class Decoder(Decoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        output_embedding: nn.Embedding,
+        token_embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -162,6 +168,7 @@ class Decoder(Decoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
+            token_embedding=token_embedding,
         )
         self.embedding = LearnableEmbedding(
             vocab_size=vocab_size,
@@ -169,10 +176,8 @@ class Decoder(Decoder):
             d_model=d_model,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            token_embedding=output_embedding,
+            token_embedding=token_embedding,
         )
-        self.classifier = nn.Linear(d_model, vocab_size, bias=False)
-        self.classifier.weight = output_embedding.weight
 
 
 class BartModel(TransformerModel):
@@ -201,8 +206,8 @@ class BartModel(TransformerModel):
             bos_id=bos_id,
             eos_id=eos_id,
         )
-        common_token_embedding = nn.Embedding(vocab_size, d_model, padding_id)
-        self.encoder = Encoder(
+        token_embedding = nn.Embedding(vocab_size, d_model, padding_id)
+        self.encoder = BartEncoder(
             vocab_size=vocab_size,
             position_size=position_size,
             d_model=d_model,
@@ -212,9 +217,9 @@ class BartModel(TransformerModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            input_embedding=common_token_embedding,
+            token_embedding=token_embedding,
         )
-        self.decoder = Decoder(
+        self.decoder = BartDecoder(
             vocab_size=vocab_size,
             position_size=position_size,
             d_model=d_model,
@@ -224,15 +229,8 @@ class BartModel(TransformerModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            output_embedding=common_token_embedding,
+            token_embedding=token_embedding,
         )
-
-    def initialize_embeddings(self, vocab_size: int):
-        common_token_embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
-        self.encoder.embedding.token_embedding = common_token_embedding
-        self.decoder.embedding.token_embedding = common_token_embedding
-        self.decoder.classifier = nn.Linear(self.d_model, vocab_size, bias=False)
-        self.decoder.classifier.weight = common_token_embedding.weight
 
     @classmethod
     def from_pretrained(cls):

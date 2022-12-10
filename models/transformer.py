@@ -7,10 +7,15 @@ import torch.nn as nn
 
 class Embedding(nn.Module):
     def __init__(
-        self, vocab_size: int, d_model: int, padding_id: int, dropout_rate: float
+        self,
+        vocab_size: int,
+        d_model: int,
+        padding_id: int,
+        dropout_rate: float,
+        token_embedding: nn.Embedding,
     ):
         super().__init__()
-        self.token_embedding = nn.Embedding(vocab_size, d_model, padding_id)
+        self.token_embedding = token_embedding
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -55,7 +60,7 @@ class MultiHeadAttention(nn.Module):
         v = self.w_v(v).view(b, l2, self.h, self.d_v).transpose(1, 2)
         matrices = q @ k.transpose(2, 3) / np.sqrt(self.d_k)  # (B, H, L1, L2)
         if len(masks.size()) == 2:
-            masks = masks.repeat_interleave(self.h * l2, dim=0).view(b, self.h, l1, l2)
+            masks = masks.repeat_interleave(self.h * l1, dim=0).view(b, self.h, l1, l2)
         else:
             masks = masks.repeat_interleave(self.h, dim=0).view(b, self.h, l1, l2)
         matrices[masks == 0] = matrices.new_tensor(torch.finfo(torch.float32).min)
@@ -175,6 +180,7 @@ class Encoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
+        token_embedding: nn.Embedding,
     ):
         super().__init__()
         self.embedding = Embedding(
@@ -182,6 +188,7 @@ class Encoder(nn.Module):
             d_model=d_model,
             padding_id=padding_id,
             dropout_rate=dropout_rate,
+            token_embedding=token_embedding,
         )
         self.layers = nn.ModuleList(
             [
@@ -215,6 +222,7 @@ class Decoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
+        token_embedding: nn.Embedding,
     ):
         super().__init__()
         self.embedding = Embedding(
@@ -222,6 +230,7 @@ class Decoder(nn.Module):
             d_model=d_model,
             padding_id=padding_id,
             dropout_rate=dropout_rate,
+            token_embedding=token_embedding,
         )
         self.layers = nn.ModuleList(
             [
@@ -235,7 +244,8 @@ class Decoder(nn.Module):
                 for _ in range(num_layers)
             ]
         )
-        self.classifier = nn.Linear(d_model, vocab_size)
+        self.classifier = nn.Linear(d_model, vocab_size, bias=False)
+        self.classifier.weight = token_embedding.weight
 
     def forward(
         self,
@@ -273,6 +283,7 @@ class TransformerModel(nn.Module):
         self.bos_id = bos_id
         self.eos_id = eos_id
         self.padding_id = padding_id
+        token_embedding = nn.Embedding(vocab_size, d_model, padding_idx=padding_id)
         self.encoder = Encoder(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -281,7 +292,8 @@ class TransformerModel(nn.Module):
             num_layers=num_encoder_layers,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            ff_activation=nn.RELU(),
+            ff_activation=nn.ReLU(),
+            token_embedding=token_embedding,
         )
         self.decoder = Decoder(
             vocab_size=vocab_size,
@@ -291,8 +303,32 @@ class TransformerModel(nn.Module):
             num_layers=num_decoder_layers,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            ff_activation=nn.RELU(),
+            ff_activation=nn.ReLU(),
+            token_embedding=token_embedding,
         )
+
+    def initialize_embeddings(self, vocab_size: int):
+        token_embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
+        self.encoder.embedding.token_embedding = token_embedding
+        self.decoder.embedding.token_embedding = token_embedding
+        self.decoder.classifier = nn.Linear(self.d_model, vocab_size, bias=False)
+        self.decoder.classifier.weight = token_embedding.weight
+
+    def freeze_embeddings(self):
+        for p in self.encoder.embedding.token_embedding.parameters():
+            p.requires_grad = False
+        for p in self.decoder.embedding.token_embedding.parameters():
+            p.requires_grad = False
+        for p in self.decoder.classifier.parameters():
+            p.requires_grad = False
+
+    def freeze_encoder(self):
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+
+    def freeze_decoder(self):
+        for p in self.decoder.parameters():
+            p.requires_grad = False
 
     def forward(
         self,

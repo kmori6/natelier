@@ -45,7 +45,13 @@ class FactorizedEmbedding(Embedding):
         dropout_rate: float,
         padding_id: int,
     ):
-        super().__init__(vocab_size, d_model, padding_id, dropout_rate)
+        super().__init__(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            padding_id=padding_id,
+            dropout_rate=dropout_rate,
+            token_embedding=nn.Embedding,
+        )
         self.padding_id = padding_id
         self.token_embedding = nn.Embedding(vocab_size, embedding_size, padding_id)
         self.segment_embedding = nn.Embedding(2, embedding_size)
@@ -90,6 +96,7 @@ class AlbertModel(Encoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
+            token_embedding=nn.Embedding,
         )
         self.d_model = d_model
         self.embedding_size = embedding_size
