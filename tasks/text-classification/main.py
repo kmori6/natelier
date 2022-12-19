@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from data import GlueDataset
 from model import TCAlbert
 from collator import TCBatchCollator
-from train import train
+from train import Trainer
 from test import test
 from metrics import (
     single_label_accuracy,
@@ -71,7 +71,8 @@ def main():
     GlueDataset.set_data_specific_arguments(args)
 
     if args.train:
-        train(args, TCAlbert, train_dataset, dev_dataset, TCBatchCollator(args))
+        trainer = Trainer(args, TCAlbert)
+        trainer.run(train_dataset, dev_dataset, TCBatchCollator(args))
 
     if args.test:
         test(
