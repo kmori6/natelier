@@ -21,7 +21,6 @@ class Trainer:
         self.args = args
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_class(args).to(self.device)
-        self.out_dir = args.out_dir
         self.early_stop_counter = 0
         self.save_args()
 
@@ -33,13 +32,11 @@ class Trainer:
     ):
         logger.setLevel(logging.INFO)
         train_dataloader, dev_dataloader = self.build_dataloaders(
-            train_dataset, dev_dataset, self.args.batch_size, collate_fn
+            train_dataset, dev_dataset, collate_fn
         )
-        optimizer = self.build_optimizer(self.args.lr, self.args.weight_decay)
-        scaler = self.build_scaler(self.args.enable_amp)
-        self.load_checkpoint(
-            self.args.checkpoint_path, optimizer, scaler, self.args.epochs
-        )
+        optimizer = self.build_optimizer()
+        scaler = self.build_scaler()
+        self.load_checkpoint(optimizer, scaler)
         self.display_model_stats()
         log = []
         for epoch in range(self.start_epoch, self.args.epochs + 1):
@@ -48,12 +45,7 @@ class Trainer:
                 train_dataloader=train_dataloader,
                 optimizer=optimizer,
                 scaler=scaler,
-                enable_amp=self.args.enable_amp,
-                accum_grad_steps=self.args.accum_grad_steps,
-                max_norm=self.args.max_norm,
-                monitor_steps=self.args.train_monitor_steps,
                 current_epoch=epoch,
-                total_epoch=self.args.epochs,
             )
             # validate
             dev_stats = self.validate_steps(dev_dataloader)
@@ -75,45 +67,39 @@ class Trainer:
         self.save_log(log)
 
     def build_dataloaders(
-        self,
-        train_dataset: Dataset,
-        dev_dataset: Dataset,
-        batch_size: int,
-        collate_fn: Callable,
+        self, train_dataset: Dataset, dev_dataset: Dataset, collate_fn: Callable
     ) -> Tuple[DataLoader, DataLoader]:
         train_dataloader = DataLoader(
             train_dataset,
-            batch_size,
+            self.args.batch_size,
             collate_fn=collate_fn,
             shuffle=True,
             drop_last=True,
         )
-        dev_dataloader = DataLoader(dev_dataset, batch_size, collate_fn=collate_fn)
+        dev_dataloader = DataLoader(
+            dev_dataset, self.args.batch_size, collate_fn=collate_fn
+        )
         logger.info(f"# train samples: {len(train_dataloader.dataset):,}")
         logger.info(f"# validate samples: {len(dev_dataloader.dataset):,}")
         return train_dataloader, dev_dataloader
 
-    def build_optimizer(self, lr: float, weight_decay: float) -> optim.Optimizer:
-        return optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+    def build_optimizer(self) -> optim.Optimizer:
+        return optim.AdamW(
+            self.model.parameters(), self.args.lr, weight_decay=self.args.weight_decay
+        )
 
-    def build_scaler(self, enabled: bool) -> GradScaler:
-        return GradScaler(enabled=enabled)
+    def build_scaler(self) -> GradScaler:
+        return GradScaler(enabled=self.args.enable_amp)
 
-    def load_checkpoint(
-        self,
-        checkpoint_path: str,
-        optimizer: optim.Optimizer,
-        scaler: GradScaler,
-        total_epochs: int,
-    ):
-        if checkpoint_path:
-            checkpoint = torch.load(checkpoint_path)
+    def load_checkpoint(self, optimizer: optim.Optimizer, scaler: GradScaler):
+        if self.args.checkpoint_path:
+            checkpoint = torch.load(self.args.checkpoint_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scaler.load_state_dict(checkpoint["scaler"])
             self.best_loss = checkpoint["best_loss"]
             self.start_epoch = checkpoint["epoch"] + 1
-            if self.start_epoch >= total_epochs:
+            if self.start_epoch >= self.args.epochs:
                 raise ValueError(
                     f"'epochs' shoule be more than checkpoint ({self.start_epoch})"
                 )
@@ -137,12 +123,7 @@ class Trainer:
         train_dataloader: DataLoader,
         optimizer: torch.optim.Optimizer,
         scaler: GradScaler,
-        enable_amp: bool,
-        accum_grad_steps: int,
-        max_norm: float,
-        monitor_steps: int,
         current_epoch: int,
-        total_epoch: int,
     ) -> Dict[str, float]:
         self.model.train()
         train_stats = {"loss": 0, "metrics": []}
@@ -151,20 +132,22 @@ class Trainer:
             with torch.autocast(
                 device_type="cuda" if torch.cuda.is_available() else "cpu",
                 dtype=torch.float16,
-                enabled=enable_amp,
+                enabled=self.args.enable_amp,
             ):
                 outputs = self.model(**batch)
-                loss = outputs["loss"] / accum_grad_steps
+                loss = outputs["loss"] / self.args.accum_grad_steps
             scaler.scale(loss).backward()
-            if (step % accum_grad_steps == 0) or (step == len(train_dataloader)):
+            if (step % self.args.accum_grad_steps == 0) or (
+                step == len(train_dataloader)
+            ):
                 scaler.unscale_(optimizer)
-                clip_grad_norm_(self.model.parameters(), max_norm)
+                clip_grad_norm_(self.model.parameters(), self.args.max_norm)
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-            if step % monitor_steps == 0:
+            if step % self.args.train_monitor_steps == 0:
                 message = (
-                    f"epoch: {current_epoch}/{total_epoch}"
+                    f"epoch: {current_epoch}/{self.args.epochs}"
                     f" - step: {step}/{len(train_dataloader)}"
                 )
                 for k, v in outputs["stats"].items():
@@ -210,7 +193,9 @@ class Trainer:
 
     def save_best_model(self, dev_loss: float):
         if dev_loss < self.best_loss:
-            torch.save(self.model.state_dict(), self.out_dir + "/model_best_loss.pt")
+            torch.save(
+                self.model.state_dict(), self.args.out_dir + "/model_best_loss.pt"
+            )
             self.best_loss = dev_loss
             self.early_stop_counter = 0
         else:
@@ -227,7 +212,7 @@ class Trainer:
                 "scaler": scaler.state_dict(),
                 "best_loss": self.best_loss,
             },
-            self.out_dir + "/model_checkpoint.pt",
+            self.args.out_dir + "/model_checkpoint.pt",
         )
 
     def early_stop(self, early_stop_patience: int) -> bool:
@@ -236,5 +221,5 @@ class Trainer:
         )
 
     def save_log(self, train_log: Dict[str, Any]):
-        with open(self.out_dir + "/train_log.json", "w", encoding="utf-8") as f:
+        with open(self.args.out_dir + "/train_log.json", "w", encoding="utf-8") as f:
             json.dump(train_log, f, indent=4, sort_keys=True)
