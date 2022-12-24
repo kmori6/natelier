@@ -6,14 +6,7 @@ import torch.nn as nn
 
 
 class Embedding(nn.Module):
-    def __init__(
-        self,
-        vocab_size: int,
-        d_model: int,
-        padding_id: int,
-        dropout_rate: float,
-        token_embedding: nn.Embedding,
-    ):
+    def __init__(self, dropout_rate: float, token_embedding: nn.Module):
         super().__init__()
         self.token_embedding = token_embedding
         self.dropout = nn.Dropout(dropout_rate)
@@ -180,15 +173,11 @@ class Encoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        token_embedding: nn.Module,
     ):
         super().__init__()
         self.embedding = Embedding(
-            vocab_size=vocab_size,
-            d_model=d_model,
-            padding_id=padding_id,
-            dropout_rate=dropout_rate,
-            token_embedding=token_embedding,
+            dropout_rate=dropout_rate, token_embedding=token_embedding
         )
         self.layers = nn.ModuleList(
             [
@@ -222,15 +211,11 @@ class Decoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        token_embedding: nn.Module,
     ):
         super().__init__()
         self.embedding = Embedding(
-            vocab_size=vocab_size,
-            d_model=d_model,
-            padding_id=padding_id,
-            dropout_rate=dropout_rate,
-            token_embedding=token_embedding,
+            dropout_rate=dropout_rate, token_embedding=token_embedding
         )
         self.layers = nn.ModuleList(
             [
