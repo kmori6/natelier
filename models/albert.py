@@ -46,9 +46,6 @@ class FactorizedEmbedding(Embedding):
         padding_id: int,
     ):
         super().__init__(
-            vocab_size=vocab_size,
-            d_model=d_model,
-            padding_id=padding_id,
             dropout_rate=dropout_rate,
             token_embedding=nn.Embedding,
         )

@@ -186,6 +186,7 @@ class Encoder(nn.Module):
                     d_ff=d_ff,
                     num_attention_heads=num_attention_heads,
                     dropout_rate=dropout_rate,
+                    ff_activation=ff_activation,
                 )
                 for _ in range(num_layers)
             ]
