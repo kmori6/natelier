@@ -83,7 +83,7 @@ class EncoderLayer(nn.Module):
         d_ff: int,
         num_attention_heads: int,
         dropout_rate: float,
-        ff_activation: nn.Module = nn.ReLU(),
+        ff_activation: nn.Module,
     ):
         super().__init__()
         self.mha = MultiHeadAttention(
@@ -117,7 +117,7 @@ class DecoderLayer(nn.Module):
         d_ff: int,
         num_attention_heads: int,
         dropout_rate: float,
-        ff_activation: nn.Module = nn.ReLU(),
+        ff_activation: nn.Module,
     ):
         super().__init__()
         self.masked_mha = MultiHeadAttention(
