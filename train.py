@@ -23,7 +23,6 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_class(args).to(self.device)
         self.early_stop_counter = 0
-        self.save_args()
 
     def run(
         self,
@@ -48,7 +47,7 @@ class Trainer:
                 current_epoch=epoch,
             )
             # validate
-            dev_stats = self.validate_steps(dev_dataloader)
+            dev_stats = self.validate_epoch(dev_dataloader)
             # aggregate
             log.append({"epoch": epoch, "train": train_stats, "validate": dev_stats})
             statement = f"epoch: {epoch}/{self.args.epochs}"
@@ -62,9 +61,10 @@ class Trainer:
             self.save_checkpoint(epoch, optimizer, scaler)
             # early stop
             if self.early_stop(self.args.patience):
-                logger.info("early stop")
+                logger.info(f"early stop training at epoch {epoch}")
                 break
         self.save_log(log)
+        self.save_train_args()
 
     def build_dataloaders(
         self, train_dataset: Dataset, dev_dataset: Dataset, collate_fn: Callable
@@ -108,12 +108,13 @@ class Trainer:
             self.start_epoch = 1
 
     def display_model_stats(self):
+        params = sum(p.numel() for p in self.model.parameters())
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         logger.info(self.model)
-        logger.info(
-            f"# model parameters: {sum(p.numel() for p in self.model.parameters()):,}"
-        )
+        logger.info(f"# model parameters: {params:,}")
+        logger.info(f"# trainable parameters: {trainable:,}")
 
-    def save_args(self):
+    def save_train_args(self):
         os.makedirs(self.args.out_dir, exist_ok=True)
         with open(self.args.out_dir + "/train_args.json", "w", encoding="utf-8") as f:
             json.dump(vars(self.args), f, indent=4, sort_keys=True)
@@ -158,7 +159,7 @@ class Trainer:
             )
         return self.aggregate_epoch_stats(train_stats, len(train_dataloader.dataset))
 
-    def validate_steps(self, dev_dataloader: DataLoader) -> Dict[str, float]:
+    def validate_epoch(self, dev_dataloader: DataLoader) -> Dict[str, float]:
         self.model.eval()
         dev_stats = {"loss": 0, "metrics": []}
         for batch in tqdm(dev_dataloader, desc="validation"):
@@ -193,17 +194,18 @@ class Trainer:
 
     def save_best_model(self, dev_loss: float):
         if dev_loss < self.best_loss:
-            torch.save(
-                self.model.state_dict(), self.args.out_dir + "/model_best_loss.pt"
-            )
+            file_path = self.args.out_dir + "/model_best_loss.pt"
+            torch.save(self.model.state_dict(), file_path)
             self.best_loss = dev_loss
             self.early_stop_counter = 0
+            logger.info(f"saved the best loss model at {file_path}")
         else:
             self.early_stop_counter += 1
 
     def save_checkpoint(
         self, epoch: int, optimizer: optim.Optimizer, scaler: GradScaler
     ):
+        file_path = self.args.out_dir + "/model_checkpoint.pt"
         torch.save(
             {
                 "epoch": epoch,
@@ -212,8 +214,9 @@ class Trainer:
                 "scaler": scaler.state_dict(),
                 "best_loss": self.best_loss,
             },
-            self.args.out_dir + "/model_checkpoint.pt",
+            file_path,
         )
+        logger.info(f"saved the model checkpoint at {file_path}")
 
     def early_stop(self, early_stop_patience: int) -> bool:
         return (
@@ -221,5 +224,7 @@ class Trainer:
         )
 
     def save_log(self, train_log: Dict[str, Any]):
-        with open(self.args.out_dir + "/train_log.json", "w", encoding="utf-8") as f:
+        file_path = self.args.out_dir + "/train_log.json"
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(train_log, f, indent=4, sort_keys=True)
+        logger.info(f"saved the training log at {file_path}")
