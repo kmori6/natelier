@@ -1,15 +1,22 @@
 import argparse
-from typing import Dict, Any
-import logging
 import random
+import sys
+from logging import INFO, Formatter, StreamHandler, getLogger
+
 import numpy as np
 import torch
 
 
-def set_logging():
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)s: %(message)s", level=logging.INFO
-    )
+def get_logger(name: str, level: int = INFO):
+    logger = getLogger("trainer")
+    logger.setLevel(INFO)
+    logger.propagate = False
+    hdlr = StreamHandler(sys.stdout)
+    hdlr.setLevel(level)
+    fmt = Formatter("%(asctime)s (%(name)s) %(levelname)s: %(message)s")
+    hdlr.setFormatter(fmt)
+    logger.addHandler(hdlr)
+    return logger
 
 
 def add_base_arguments(parser: argparse.ArgumentParser):
@@ -35,25 +42,3 @@ def set_reproducibility(seed: int = 0):
     np.random.seed(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-
-
-def aggregate_step_stats(
-    batch: Dict[str, torch.Tensor],
-    epoch_stats: Dict[str, Any],
-    step_stats: Dict[str, float],
-) -> Dict[str, Any]:
-    epoch_stats["loss"] += step_stats["loss"] * batch[next(iter(batch))].size(0)
-    epoch_stats["metrics"].append(step_stats)
-    return epoch_stats
-
-
-def aggregate_epoch_stats(
-    epoch_stats: Dict[str, Any], num_samples: int
-) -> Dict[str, float]:
-    epoch_stats["loss"] /= num_samples
-    stats_keys = [k for k in epoch_stats["metrics"][0].keys() if k != "loss"]
-    if len(stats_keys) > 0:
-        for k in stats_keys:
-            epoch_stats[k] = np.mean([stats[k] for stats in epoch_stats["metrics"]])
-    epoch_stats.pop("metrics", None)
-    return epoch_stats

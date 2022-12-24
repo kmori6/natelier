@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from argparse import Namespace
 from typing import Any, Callable, Dict, List, Tuple
@@ -13,7 +12,9 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from utils import get_logger
+
+logger = get_logger("trainer")
 
 
 class Trainer:
@@ -30,7 +31,6 @@ class Trainer:
         dev_dataset: DataLoader,
         collate_fn: Callable[[List[Dict[str, Any]]], Dict[str, torch.Tensor]],
     ):
-        logger.setLevel(logging.INFO)
         train_dataloader, dev_dataloader = self.build_dataloaders(
             train_dataset, dev_dataset, collate_fn
         )
@@ -62,7 +62,7 @@ class Trainer:
             self.save_checkpoint(epoch, optimizer, scaler)
             # early stop
             if self.early_stop(self.args.patience):
-                logging.info("early stop")
+                logger.info("early stop")
                 break
         self.save_log(log)
 
