@@ -1,10 +1,13 @@
 from argparse import Namespace
+from typing import Any, Dict
+
 import torch
 import torch.nn as nn
-from models.mbart import MbartModel
-from typing import Any, Dict
-from metrics import tokens_accuracy
+
 from loss.cross_entropy import CrossEntropyLoss
+from metrics import tokens_accuracy
+from models.mbart import MbartModel
+from outputs import TrainOutputs
 
 
 class NMTBart(nn.Module):
@@ -23,14 +26,12 @@ class NMTBart(nn.Module):
         decoder_masks: torch.Tensor,
         labels: torch.Tensor,
     ) -> Dict[str, Any]:
-
         logits = self.model(
             encoder_tokens, encoder_masks, decoder_tokens, decoder_masks
         )
         loss = self.loss_fn(logits.view(-1, self.vocab_size), labels.view(-1))
         stats = {"loss": loss.item(), "acc": tokens_accuracy(logits.argmax(-1), labels)}
-
-        return {"loss": loss, "logits": logits, "stats": stats}
+        return TrainOutputs(loss, stats)
 
     def translate(
         self, tokens: torch.Tensor, beam_size: int, max_length: int

@@ -1,26 +1,26 @@
-import os
 import argparse
-from tqdm import tqdm
-import sacrebleu
-from typing import Dict
-import torch
-from torch.utils.data import DataLoader
-from tokenizer import NMTTokenizer
-from data import Iwslt2017Dataset
-from collator import NMTBatchCollator
-from model import NMTBart
-from train import train
 from test import test
-from utils import add_base_arguments, set_logging, set_reproducibility
+from typing import Dict
+
+import sacrebleu
+import torch
+from collator import NMTBatchCollator
+from data import Iwslt2017Dataset
+from model import NMTBart
+from tokenizer import NMTTokenizer
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from train import Trainer
 
 
 def add_specific_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument("--dataset", default="iwslt2017-de-en", type=str)
+    parser.add_argument("--dataset", default="iwslt2017-en-ja", type=str)
     parser.add_argument("--test_ratio", default=None, type=int)
     parser.add_argument("--model_name", default="facebook/mbart-large-cc25", type=str)
     parser.add_argument("--train_tokenizer", default=False, action="store_true")
-    parser.add_argument("--src_lang", default="de_DE", type=str)
-    parser.add_argument("--tgt_lang", default="en_XX", type=str)
+    parser.add_argument("--src_lang", default="en_XX", type=str)
+    parser.add_argument("--tgt_lang", default="ja_XX", type=str)
     parser.add_argument("--vocab_size", default=250027, type=int)
     parser.add_argument("--beam_size", default=5, type=int)
     parser.add_argument("--max_length", default=128, type=int)
@@ -65,19 +65,17 @@ def test_steps(
 
 def main():
     parser = argparse.ArgumentParser()
-    add_base_arguments(parser)
+    Trainer.add_train_args(parser)
     add_specific_arguments(parser)
     args = parser.parse_args()
-
-    set_logging()
-    set_reproducibility()
 
     train_dataset = Iwslt2017Dataset(args, "train")
     dev_dataset = Iwslt2017Dataset(args, "validation")
     test_dataset = Iwslt2017Dataset(args, "test")
 
     if args.train:
-        train(args, NMTBart, train_dataset, dev_dataset, NMTBatchCollator(args))
+        trainer = Trainer(args, NMTBart)
+        trainer.run(train_dataset, dev_dataset, NMTBatchCollator(args))
 
     if args.test:
         if args.batch_size > 1:
