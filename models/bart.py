@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from .transformer import Decoder, Embedding, Encoder, TransformerModel
+from .transformer import Embedding, Encoder, Decoder, TransformerModel
 
 KEY_DICT = {
     "encoder": {
@@ -77,13 +77,7 @@ class LearnableEmbedding(Embedding):
         padding_id: int,
         token_embedding: nn.Embedding,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            d_model=d_model,
-            padding_id=padding_id,
-            dropout_rate=dropout_rate,
-            token_embedding=token_embedding,
-        )
+        super().__init__(dropout_rate=dropout_rate, token_embedding=token_embedding)
         self.padding_id = padding_id
         self.position_embedding = nn.Embedding(position_size, d_model, padding_id)
         self.embedding_norm = nn.LayerNorm(d_model)
