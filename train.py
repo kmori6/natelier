@@ -1,4 +1,5 @@
 import json
+from argparse import ArgumentParser
 import os
 from argparse import Namespace
 from typing import Any, Callable, Dict, List, Tuple
@@ -12,7 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from utils import get_logger
+from utils import get_logger, set_reproducibility
 
 logger = get_logger("trainer")
 
@@ -20,6 +21,7 @@ logger = get_logger("trainer")
 class Trainer:
     def __init__(self, args: Namespace, model_class: nn.Module):
         self.args = args
+        set_reproducibility()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_class(args).to(self.device)
         self.early_stop_counter = 0
@@ -136,7 +138,7 @@ class Trainer:
                 enabled=self.args.enable_amp,
             ):
                 outputs = self.model(**batch)
-                loss = outputs["loss"] / self.args.accum_grad_steps
+                loss = outputs.loss / self.args.accum_grad_steps
             scaler.scale(loss).backward()
             if (step % self.args.accum_grad_steps == 0) or (
                 step == len(train_dataloader)
@@ -151,12 +153,10 @@ class Trainer:
                     f"epoch: {current_epoch}/{self.args.epochs}"
                     f" - step: {step}/{len(train_dataloader)}"
                 )
-                for k, v in outputs["stats"].items():
+                for k, v in outputs.stats.items():
                     message += f" - {k}: {v:.3f}"
                 logger.info(message)
-            train_stats = self.aggregate_step_stats(
-                batch, train_stats, outputs["stats"]
-            )
+            train_stats = self.aggregate_step_stats(batch, train_stats, outputs.stats)
         return self.aggregate_epoch_stats(train_stats, len(train_dataloader.dataset))
 
     def validate_epoch(self, dev_dataloader: DataLoader) -> Dict[str, float]:
@@ -166,7 +166,7 @@ class Trainer:
             batch = {k: v.to(self.device) for k, v in batch.items()}
             with torch.no_grad():
                 outputs = self.model(**batch)
-            dev_stats = self.aggregate_step_stats(batch, dev_stats, outputs["stats"])
+            dev_stats = self.aggregate_step_stats(batch, dev_stats, outputs.stats)
         return self.aggregate_epoch_stats(dev_stats, len(dev_dataloader.dataset))
 
     @staticmethod
@@ -228,3 +228,20 @@ class Trainer:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(train_log, f, indent=4, sort_keys=True)
         logger.info(f"saved the training log at {file_path}")
+
+    @staticmethod
+    def add_train_args(parser: ArgumentParser):
+        parser.add_argument("--out_dir", default="./results", type=str)
+        parser.add_argument("--train", default=False, action="store_true")
+        parser.add_argument("--test", default=False, action="store_true")
+        parser.add_argument("--enable_amp", default=False, action="store_true")
+        parser.add_argument("--checkpoint_path", default=None, type=str)
+        parser.add_argument("--batch_size", default=16, type=int)
+        parser.add_argument("--accum_grad_steps", default=4, type=int)
+        parser.add_argument("--lr", default=2e-5, type=float)
+        parser.add_argument("--label_smoothing", default=0.1, type=float)
+        parser.add_argument("--weight_decay", default=1e-2, type=float)
+        parser.add_argument("--max_norm", default=5.0, type=float)
+        parser.add_argument("--train_monitor_steps", default=50, type=int)
+        parser.add_argument("--epochs", default=3, type=int)
+        parser.add_argument("--patience", default=3, type=int)
