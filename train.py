@@ -32,6 +32,7 @@ class Trainer:
         dev_dataset: DataLoader,
         collate_fn: Callable[[List[Dict[str, Any]]], Dict[str, torch.Tensor]],
     ):
+        os.makedirs(self.args.out_dir, exist_ok=True)
         train_dataloader, dev_dataloader = self.build_dataloaders(
             train_dataset, dev_dataset, collate_fn
         )
@@ -117,7 +118,6 @@ class Trainer:
         logger.info(f"# trainable parameters: {trainable:,}")
 
     def save_train_args(self):
-        os.makedirs(self.args.out_dir, exist_ok=True)
         with open(self.args.out_dir + "/train_args.json", "w", encoding="utf-8") as f:
             json.dump(vars(self.args), f, indent=4, sort_keys=True)
 
