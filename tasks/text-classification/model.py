@@ -1,9 +1,12 @@
 from argparse import Namespace
+from typing import Any, Dict
+
 import torch
 import torch.nn as nn
-from typing import Dict, Any
-from models.albert import AlbertModel
+
 from metrics import single_label_accuracy, spearman_correlation
+from models.albert import AlbertModel
+from outputs import ModelOutputs
 
 
 class TCAlbert(nn.Module):
@@ -40,4 +43,4 @@ class TCAlbert(nn.Module):
             )
         stats["loss"] = loss.item()
 
-        return {"loss": loss, "logits": logits, "stats": stats}
+        return ModelOutputs(loss, stats, logits)
