@@ -1,9 +1,11 @@
-from typing import Tuple, Dict, Any
-from tqdm import tqdm
+from typing import Tuple
+
 import torch
 import torch.nn as nn
-from .bart import BartEncoder, BartDecoder, BartModel
+from tqdm import tqdm
 from transformers import MBartModel as PretrainedModel
+
+from .bart import BartDecoder, BartEncoder, BartModel
 
 KEY_DICT = {
     "encoder": {
