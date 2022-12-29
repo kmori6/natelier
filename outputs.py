@@ -5,6 +5,7 @@ import torch
 
 
 @dataclass
-class TrainOutputs:
-    loss: torch.Tensor
-    stats: Dict[str, float]
+class ModelOutputs:
+    loss: torch.Tensor = None
+    stats: Dict[str, float] = None
+    logits: torch.Tensor = None
