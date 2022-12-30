@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from transformers import MBartModel as PretrainedModel
+from transformers import MBartModel
 
 from .bart import BartDecoder, BartEncoder, Bart
 
@@ -169,6 +169,7 @@ class Mbart(Bart):
         bos_id: int = 0,
         eos_id: int = 2,
         padding_id: int = 1,
+        load_pretrained_weight: bool = False,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -207,10 +208,11 @@ class Mbart(Bart):
             ff_activation=nn.GELU(),
             embedding=embedding,
         )
+        if load_pretrained_weight:
+            self.load_pretrained_weight()
 
-    @classmethod
-    def from_pretrained(cls):
-        pretrained_model = PretrainedModel.from_pretrained("facebook/mbart-large-cc25")
+    def load_pretrained_weight(self):
+        pretrained_model = MBartModel.from_pretrained("facebook/mbart-large-cc25")
         state_dict = pretrained_model.state_dict()
         tgt_dict = {}
         for k in tqdm(state_dict.keys()):
@@ -225,6 +227,4 @@ class Mbart(Bart):
                     module = k.split(".", 1)[-1]
                     tgt_key = f"{part}.{KEY_DICT[part][module]}"
             tgt_dict[tgt_key] = state_dict[k]
-        model = cls()
-        model.load_state_dict(tgt_dict)
-        return model
+        self.load_state_dict(tgt_dict)

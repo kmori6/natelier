@@ -187,6 +187,7 @@ class Bart(Transformer):
         bos_id: int = 0,
         eos_id: int = 2,
         padding_id: int = 1,
+        load_pretrained_weight: bool = False,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -225,15 +226,16 @@ class Bart(Transformer):
             ff_activation=nn.GELU(),
             embedding=embedding,
         )
+        if load_pretrained_weight:
+            self.load_pretrained_weight()
 
-    @classmethod
-    def from_pretrained(cls):
+    def load_pretrained_weight(self):
         pretrained_model = torch.hub.load("pytorch/fairseq", "bart.base")
         state_dict = pretrained_model.model.state_dict()
         tgt_dict = {}
         for k in ["encoder.version", "decoder.version"]:
             del state_dict[k]
-        for k in tqdm(state_dict.keys()):
+        for k in tqdm(state_dict.keys(), desc="Loading"):
             part, module = k.split(".")[:2]
             if module == "layers":
                 layer_id, sub_module = k.split(".", 3)[2:]
@@ -244,6 +246,4 @@ class Bart(Transformer):
                 module = k.split(".", 1)[-1]
                 tgt_key = f"{part}.{KEY_DICT[part][module]}"
             tgt_dict[tgt_key] = state_dict[k]
-        model = cls()
-        model.load_state_dict(tgt_dict)
-        return model
+        self.load_state_dict(tgt_dict)

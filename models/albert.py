@@ -2,7 +2,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 from .transformer import Embedding, EncoderLayer, Encoder
-from transformers import AlbertModel as PretrainedModel
+from transformers import AlbertModel
 
 KEY_DICT = {
     "embeddings": {
@@ -80,6 +80,7 @@ class Albert(Encoder):
         dropout_rate: float = 0.0,
         padding_id: int = 0,
         ff_activation: nn.Module = nn.GELU(),
+        load_pretrained_weight: bool = False,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -111,6 +112,8 @@ class Albert(Encoder):
             dropout_rate=dropout_rate,
             ff_activation=ff_activation,
         )
+        if load_pretrained_weight:
+            self.load_pretrained_weight()
 
     def forward(
         self, tokens: torch.Tensor, masks: torch.Tensor, segments: torch.Tensor
@@ -120,15 +123,14 @@ class Albert(Encoder):
             hs, masks = self.layers(hs, masks)
         return hs
 
-    @classmethod
-    def from_pretrained(cls):
-        pretrained_model = PretrainedModel.from_pretrained(
+    def load_pretrained_weight(self):
+        pretrained_model = AlbertModel.from_pretrained(
             "albert-base-v2", add_pooling_layer=False
         )
         state_dict = pretrained_model.state_dict()
         del state_dict["embeddings.position_ids"]
         tgt_dict = {}
-        for k in tqdm(state_dict.keys()):
+        for k in tqdm(state_dict.keys(), desc="Loading"):
             module, sub_module = k.split(".")[:2]
             if module == "encoder" and sub_module == "albert_layer_groups":
                 sub_module = k.split(".", 5)[-1]
@@ -137,6 +139,4 @@ class Albert(Encoder):
                 sub_module = k.split(".", 1)[-1]
                 tgt_key = KEY_DICT[module][sub_module]
             tgt_dict[tgt_key] = state_dict[k]
-        model = cls()
-        model.load_state_dict(tgt_dict)
-        return model
+        self.load_state_dict(tgt_dict)
