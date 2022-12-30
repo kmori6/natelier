@@ -1,8 +1,9 @@
-from tqdm import tqdm
 import torch
 import torch.nn as nn
-from .transformer import Embedding, EncoderLayer, Encoder
-from transformers import AlbertModel
+from tqdm import tqdm
+from transformers import AlbertModel, AlbertTokenizerFast
+
+from .transformer import Embedding, Encoder, EncoderLayer
 
 KEY_DICT = {
     "embeddings": {
@@ -140,3 +141,7 @@ class Albert(Encoder):
                 tgt_key = KEY_DICT[module][sub_module]
             tgt_dict[tgt_key] = state_dict[k]
         self.load_state_dict(tgt_dict)
+
+    @staticmethod
+    def get_pretrained_tokenizer() -> AlbertTokenizerFast:
+        return AlbertTokenizerFast.from_pretrained("albert-base-v2")
