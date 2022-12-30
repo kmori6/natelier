@@ -8,8 +8,9 @@ class ASRBatchCollator:
     def __init__(self, tokenizer: ASRTokenizer, return_transcript: bool = False):
         self.tokenizer = tokenizer
         self.return_transcript = return_transcript
-        self.bos_token_id = len(tokenizer.token_list) - 1
-        self.eos_token_id = len(tokenizer.token_list) - 1
+        self.bos_id = tokenizer.bos_id
+        self.eos_id = tokenizer.eos_id
+        self.pad_id = tokenizer.pad_id
 
     def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         waves, wave_lens = [], []
@@ -22,8 +23,8 @@ class ASRBatchCollator:
             # text processing
             label = self.tokenizer(data["transcript"].replace(" ", "|"))
             encoder_label = torch.tensor(label, dtype=torch.long)
-            decoder_token = torch.tensor([self.bos_token_id] + label, dtype=torch.long)
-            decoder_label = torch.tensor(label + [self.eos_token_id], dtype=torch.long)
+            decoder_token = torch.tensor([self.bos_id] + label, dtype=torch.long)
+            decoder_label = torch.tensor(label + [self.eos_id], dtype=torch.long)
             encoder_labels.append(encoder_label)
             decoder_tokens.append(decoder_token)
             decoder_labels.append(decoder_label)
@@ -33,7 +34,7 @@ class ASRBatchCollator:
             encoder_labels, batch_first=True, padding_value=-100
         )
         decoder_tokens = pad_sequence(
-            decoder_tokens, batch_first=True, padding_value=self.eos_token_id
+            decoder_tokens, batch_first=True, padding_value=self.pad_id
         )
         decoder_labels = pad_sequence(
             decoder_labels, batch_first=True, padding_value=-100
@@ -53,7 +54,7 @@ class ASRBatchCollator:
 
     def decoder_masks(self, decoder_tokens: torch.Tensor) -> torch.Tensor:
         batch_size = len(decoder_tokens)
-        lengths = (decoder_tokens != self.eos_token_id).sum(-1) + 1
+        lengths = (decoder_tokens != self.pad_id).sum(-1)
         max_length = max(lengths)
         masks = pad_sequence(
             [torch.ones(length) for length in lengths],

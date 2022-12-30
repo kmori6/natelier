@@ -1,35 +1,38 @@
 from argparse import Namespace
-from typing import Dict, Any
+from typing import Any, Dict
+
 import numpy as np
 import torch
 import torch.nn as nn
-from models.distilhubert import DistilhubertModel
-from models.transformer import Decoder as TransformerDecoder
 from espnet.nets.ctc_prefix_score import CTCPrefixScore
+
 from loss.cross_entropy import CrossEntropyLoss
 from metrics import tokens_accuracy
+from models.distilhubert import DistilHubert
+from models.transformer import Transformer
+from outputs import ModelOutputs
 
 
-class ASRDistilhubert(nn.Module):
+class DistilHubertTransformerDecoderModel(Transformer):
     def __init__(self, args: Namespace):
-        super().__init__()
-        self.bos_token_id = args.vocab_size - 1
-        self.eos_token_id = args.vocab_size - 1
-        self.vocab_size = args.vocab_size
-        self.ctc_loss_weight = args.ctc_loss_weight
-        self.encoder = DistilhubertModel.from_pretrained()
-        self.decoder = TransformerDecoder(
+        super().__init__(
             vocab_size=args.vocab_size,
-            d_model=args.hidden_size,
-            num_attention_heads=args.decoder_attention_heads,
-            d_ff=args.decoder_feedforward_hidden_size,
-            num_layers=args.decoder_layers,
-            dropout_rate=args.decoder_dropout_rate,
+            d_model=768,
+            d_ff=3072,
+            num_attention_heads=12,
+            num_encoder_layers=2,
+            num_decoder_layers=args.decoder_layers,
+            dropout_rate=0.1,
+            padding_id=3,
+            bos_id=1,
+            eos_id=2,
         )
-        self.ctc_classifier = nn.Linear(args.hidden_size, args.vocab_size)
+        self.ctc_blank_id = 0
+        self.ctc_loss_weight = args.ctc_loss_weight
+        self.encoder = DistilHubert.from_pretrained()
+        self.ctc_classifier = nn.Linear(self.d_model, args.vocab_size)
         self.ctc_loss_fn = nn.CTCLoss(reduction="sum", zero_infinity=True)
         self.att_loss_fn = CrossEntropyLoss("sum", args.label_smoothing)
-
         self.encoder.freeze_convolution()
 
     def forward(
@@ -42,27 +45,13 @@ class ASRDistilhubert(nn.Module):
         decoder_masks: torch.Tensor,
         decoder_labels: torch.Tensor,
     ) -> Dict[str, Any]:
-
         # encoder
         encoder_hs, encoder_hs_lens, encoder_masks = self.encoder(
             encoder_waves, encoder_wave_lens
         )
-
-        # ctc
         stats = dict()
-        if self.ctc_loss_weight != 0.0:
-            ctc_logits = self.ctc_classifier(encoder_hs).transpose(0, 1)  # (T, B, C)
-            ctc_log_probs = torch.log_softmax(ctc_logits, dim=-1)
-            encoder_labels = encoder_labels[encoder_labels >= 0]  # ignore -100 tokens
-            loss_ctc = self.ctc_loss_fn(
-                ctc_log_probs, encoder_labels, encoder_hs_lens, encoder_label_lens
-            ) / encoder_waves.size(0)
-            stats["loss_ctc"] = loss_ctc.item()
-        else:
-            loss_ctc = 0
-
         # decoder
-        if self.ctc_loss_weight != 1.0:
+        if self.ctc_loss_weight < 1.0:
             att_logits = self.decoder(
                 decoder_tokens, decoder_masks, encoder_hs, encoder_masks
             )
@@ -73,11 +62,20 @@ class ASRDistilhubert(nn.Module):
             stats["att_acc"] = tokens_accuracy(att_logits.argmax(-1), decoder_labels)
         else:
             loss_att = 0
-
+        # ctc
+        if self.ctc_loss_weight > 0.0:
+            ctc_logits = self.ctc_classifier(encoder_hs).transpose(0, 1)  # (T, B, C)
+            ctc_log_probs = torch.log_softmax(ctc_logits, dim=-1)
+            encoder_labels = encoder_labels[encoder_labels >= 0]  # ignore -100 tokens
+            loss_ctc = self.ctc_loss_fn(
+                ctc_log_probs, encoder_labels, encoder_hs_lens, encoder_label_lens
+            ) / encoder_waves.size(0)
+            stats["loss_ctc"] = loss_ctc.item()
+        else:
+            loss_ctc = 0
         loss = self.ctc_loss_weight * loss_ctc + (1 - self.ctc_loss_weight) * loss_att
         stats["loss"] = loss.item()
-
-        return {"loss": loss, "stats": stats}
+        return ModelOutputs(loss, stats, att_logits)
 
     def recognize(
         self,
