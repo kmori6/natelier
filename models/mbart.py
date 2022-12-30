@@ -5,11 +5,11 @@ import torch.nn as nn
 from tqdm import tqdm
 from transformers import MBartModel as PretrainedModel
 
-from .bart import BartDecoder, BartEncoder, BartModel
+from .bart import BartDecoder, BartEncoder, Bart
 
 KEY_DICT = {
     "encoder": {
-        "embed_tokens.weight": "embedding.token_embedding.weight",
+        "embed_tokens.weight": "embedding.embedding.weight",
         "embed_positions.weight": "embedding.position_embedding.weight",
         "layernorm_embedding.weight": "embedding.embedding_norm.weight",
         "layernorm_embedding.bias": "embedding.embedding_norm.bias",
@@ -35,7 +35,7 @@ KEY_DICT = {
         },
     },
     "decoder": {
-        "embed_tokens.weight": "embedding.token_embedding.weight",
+        "embed_tokens.weight": "embedding.embedding.weight",
         "embed_positions.weight": "embedding.position_embedding.weight",
         "layernorm_embedding.weight": "embedding.embedding_norm.weight",
         "layernorm_embedding.bias": "embedding.embedding_norm.bias",
@@ -85,7 +85,7 @@ class MbartEncoder(BartEncoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -97,7 +97,7 @@ class MbartEncoder(BartEncoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.norm = nn.LayerNorm(d_model)
 
@@ -123,7 +123,7 @@ class MbartDecoder(BartDecoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -135,7 +135,7 @@ class MbartDecoder(BartDecoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.norm = nn.LayerNorm(d_model)
 
@@ -156,7 +156,7 @@ class MbartDecoder(BartDecoder):
         return hs
 
 
-class MbartModel(BartModel):
+class Mbart(Bart):
     def __init__(
         self,
         vocab_size: int = 250027,
@@ -182,7 +182,7 @@ class MbartModel(BartModel):
             eos_id=eos_id,
             padding_id=padding_id,
         )
-        token_embedding = nn.Embedding(vocab_size, d_model, padding_id)
+        embedding = nn.Embedding(vocab_size, d_model, padding_id)
         self.encoder = MbartEncoder(
             vocab_size=vocab_size,
             position_size=position_size,
@@ -193,7 +193,7 @@ class MbartModel(BartModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.decoder = MbartDecoder(
             vocab_size=vocab_size,
@@ -205,7 +205,7 @@ class MbartModel(BartModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
 
     @classmethod

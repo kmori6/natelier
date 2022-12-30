@@ -6,7 +6,7 @@ from transformers import AlbertModel as PretrainedModel
 
 KEY_DICT = {
     "embeddings": {
-        "word_embeddings.weight": "embedding.token_embedding.weight",
+        "word_embeddings.weight": "embedding.embedding.weight",
         "position_embeddings.weight": "embedding.position_embedding.weight",
         "token_type_embeddings.weight": "embedding.segment_embedding.weight",
         "LayerNorm.weight": "embedding.embedding_norm.weight",
@@ -45,19 +45,16 @@ class FactorizedEmbedding(Embedding):
         dropout_rate: float,
         padding_id: int,
     ):
-        super().__init__(
-            dropout_rate=dropout_rate,
-            token_embedding=nn.Embedding,
-        )
+        super().__init__(dropout_rate=dropout_rate, embedding=nn.Embedding)
         self.padding_id = padding_id
-        self.token_embedding = nn.Embedding(vocab_size, embedding_size, padding_id)
+        self.embedding = nn.Embedding(vocab_size, embedding_size, padding_id)
         self.segment_embedding = nn.Embedding(2, embedding_size)
         self.position_embedding = nn.Embedding(position_size, embedding_size)
         self.embedding_norm = nn.LayerNorm(embedding_size)
         self.embedding_projection = nn.Linear(embedding_size, d_model)
 
     def forward(self, tokens: torch.Tensor, segments: torch.Tensor) -> torch.Tensor:
-        token_embedding = self.token_embedding(tokens)
+        token_embedding = self.embedding(tokens)
         segment_embedding = self.segment_embedding(segments)
 
         length = tokens.size(1)
@@ -70,7 +67,7 @@ class FactorizedEmbedding(Embedding):
         return self.embedding_projection(hs)
 
 
-class AlbertModel(Encoder):
+class Albert(Encoder):
     def __init__(
         self,
         vocab_size: int = 30000,
@@ -93,7 +90,7 @@ class AlbertModel(Encoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
-            token_embedding=nn.Embedding,
+            embedding=nn.Embedding,
         )
         self.d_model = d_model
         self.embedding_size = embedding_size

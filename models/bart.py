@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from .transformer import Embedding, Encoder, Decoder, TransformerModel
+from .transformer import Embedding, Encoder, Decoder, Transformer
 
 KEY_DICT = {
     "encoder": {
-        "embed_tokens.weight": "embedding.token_embedding.weight",
+        "embed_tokens.weight": "embedding.embedding.weight",
         "embed_positions.weight": "embedding.position_embedding.weight",
         "layernorm_embedding.weight": "embedding.embedding_norm.weight",
         "layernorm_embedding.bias": "embedding.embedding_norm.bias",
@@ -30,7 +30,7 @@ KEY_DICT = {
         },
     },
     "decoder": {
-        "embed_tokens.weight": "embedding.token_embedding.weight",
+        "embed_tokens.weight": "embedding.embedding.weight",
         "embed_positions.weight": "embedding.position_embedding.weight",
         "layernorm_embedding.weight": "embedding.embedding_norm.weight",
         "layernorm_embedding.bias": "embedding.embedding_norm.bias",
@@ -75,15 +75,15 @@ class LearnableEmbedding(Embedding):
         d_model: int,
         dropout_rate: float,
         padding_id: int,
-        token_embedding: nn.Embedding,
+        embedding: nn.Embedding,
     ):
-        super().__init__(dropout_rate=dropout_rate, token_embedding=token_embedding)
+        super().__init__(dropout_rate=dropout_rate, embedding=embedding)
         self.padding_id = padding_id
         self.position_embedding = nn.Embedding(position_size, d_model, padding_id)
         self.embedding_norm = nn.LayerNorm(d_model)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        token_embedding = self.token_embedding(tokens)
+        token_embedding = self.embedding(tokens)
         position_embedding = self.embed_positions(tokens)
         hs = self.embedding_norm(token_embedding + position_embedding)
         hs = self.dropout(hs)
@@ -116,7 +116,7 @@ class BartEncoder(Encoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -127,7 +127,7 @@ class BartEncoder(Encoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.embedding = LearnableEmbedding(
             vocab_size=vocab_size,
@@ -135,7 +135,7 @@ class BartEncoder(Encoder):
             d_model=d_model,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
 
 
@@ -151,7 +151,7 @@ class BartDecoder(Decoder):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Embedding,
+        embedding: nn.Embedding,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -162,7 +162,7 @@ class BartDecoder(Decoder):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=ff_activation,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.embedding = LearnableEmbedding(
             vocab_size=vocab_size,
@@ -170,11 +170,11 @@ class BartDecoder(Decoder):
             d_model=d_model,
             dropout_rate=dropout_rate,
             padding_id=padding_id,
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
 
 
-class BartModel(TransformerModel):
+class Bart(Transformer):
     def __init__(
         self,
         vocab_size: int = 51201,
@@ -200,7 +200,7 @@ class BartModel(TransformerModel):
             bos_id=bos_id,
             eos_id=eos_id,
         )
-        token_embedding = nn.Embedding(vocab_size, d_model, padding_id)
+        embedding = nn.Embedding(vocab_size, d_model, padding_id)
         self.encoder = BartEncoder(
             vocab_size=vocab_size,
             position_size=position_size,
@@ -211,7 +211,7 @@ class BartModel(TransformerModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.decoder = BartDecoder(
             vocab_size=vocab_size,
@@ -223,7 +223,7 @@ class BartModel(TransformerModel):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.GELU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
 
     @classmethod
