@@ -1,3 +1,4 @@
+# flake8: noqa
 from .albert import Albert
 from .bart import Bart
 from .distilhubert import DistilHubert
