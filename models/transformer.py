@@ -6,9 +6,9 @@ import torch.nn as nn
 
 
 class Embedding(nn.Module):
-    def __init__(self, dropout_rate: float, token_embedding: nn.Module):
+    def __init__(self, dropout_rate: float, embedding: nn.Module):
         super().__init__()
-        self.token_embedding = token_embedding
+        self.embedding = embedding
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -173,12 +173,10 @@ class Encoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Module,
+        embedding: nn.Module,
     ):
         super().__init__()
-        self.embedding = Embedding(
-            dropout_rate=dropout_rate, token_embedding=token_embedding
-        )
+        self.embedding = Embedding(dropout_rate=dropout_rate, embedding=embedding)
         self.layers = nn.ModuleList(
             [
                 EncoderLayer(
@@ -212,12 +210,10 @@ class Decoder(nn.Module):
         dropout_rate: float,
         padding_id: int,
         ff_activation: nn.Module,
-        token_embedding: nn.Module,
+        embedding: nn.Module,
     ):
         super().__init__()
-        self.embedding = Embedding(
-            dropout_rate=dropout_rate, token_embedding=token_embedding
-        )
+        self.embedding = Embedding(dropout_rate=dropout_rate, embedding=embedding)
         self.layers = nn.ModuleList(
             [
                 DecoderLayer(
@@ -231,7 +227,7 @@ class Decoder(nn.Module):
             ]
         )
         self.classifier = nn.Linear(d_model, vocab_size, bias=False)
-        self.classifier.weight = token_embedding.weight
+        self.classifier.weight = embedding.weight
 
     def forward(
         self,
@@ -249,7 +245,7 @@ class Decoder(nn.Module):
         return hs
 
 
-class TransformerModel(nn.Module):
+class Transformer(nn.Module):
     def __init__(
         self,
         vocab_size: int,
@@ -269,7 +265,7 @@ class TransformerModel(nn.Module):
         self.bos_id = bos_id
         self.eos_id = eos_id
         self.padding_id = padding_id
-        token_embedding = nn.Embedding(vocab_size, d_model, padding_idx=padding_id)
+        embedding = nn.Embedding(vocab_size, d_model, padding_idx=padding_id)
         self.encoder = Encoder(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -279,7 +275,7 @@ class TransformerModel(nn.Module):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.ReLU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
         self.decoder = Decoder(
             vocab_size=vocab_size,
@@ -290,20 +286,20 @@ class TransformerModel(nn.Module):
             dropout_rate=dropout_rate,
             padding_id=padding_id,
             ff_activation=nn.ReLU(),
-            token_embedding=token_embedding,
+            embedding=embedding,
         )
 
     def initialize_embeddings(self, vocab_size: int):
-        token_embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
-        self.encoder.embedding.token_embedding = token_embedding
-        self.decoder.embedding.token_embedding = token_embedding
+        embedding = nn.Embedding(vocab_size, self.d_model, self.padding_id)
+        self.encoder.embedding.embedding = embedding
+        self.decoder.embedding.embedding = embedding
         self.decoder.classifier = nn.Linear(self.d_model, vocab_size, bias=False)
-        self.decoder.classifier.weight = token_embedding.weight
+        self.decoder.classifier.weight = embedding.weight
 
     def freeze_embeddings(self):
-        for p in self.encoder.embedding.token_embedding.parameters():
+        for p in self.encoder.embedding.embedding.parameters():
             p.requires_grad = False
-        for p in self.decoder.embedding.token_embedding.parameters():
+        for p in self.decoder.embedding.embedding.parameters():
             p.requires_grad = False
         for p in self.decoder.classifier.parameters():
             p.requires_grad = False
