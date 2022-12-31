@@ -1,7 +1,6 @@
 import json
-from argparse import ArgumentParser
 import os
-from argparse import Namespace
+from argparse import ArgumentParser, Namespace
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
@@ -13,6 +12,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from sampler import DefaultSampler
 from utils import get_logger, set_reproducibility
 
 logger = get_logger("trainer")
@@ -74,13 +74,16 @@ class Trainer:
     ) -> Tuple[DataLoader, DataLoader]:
         train_dataloader = DataLoader(
             train_dataset,
-            self.args.batch_size,
+            batch_size=self.args.batch_size,
+            sampler=DefaultSampler(train_dataset, shuffle=True),
             collate_fn=collate_fn,
-            shuffle=True,
             drop_last=True,
         )
         dev_dataloader = DataLoader(
-            dev_dataset, self.args.batch_size, collate_fn=collate_fn
+            dev_dataset,
+            batch_size=self.args.batch_size,
+            sampler=DefaultSampler(dev_dataset, shuffle=False),
+            collate_fn=collate_fn,
         )
         logger.info(f"# train samples: {len(train_dataloader.dataset):,}")
         logger.info(f"# validate samples: {len(dev_dataloader.dataset):,}")
@@ -162,7 +165,7 @@ class Trainer:
     def validate_epoch(self, dev_dataloader: DataLoader) -> Dict[str, float]:
         self.model.eval()
         dev_stats = {"loss": 0, "metrics": []}
-        for batch in tqdm(dev_dataloader, desc="validation"):
+        for batch in tqdm(dev_dataloader, desc="Validating"):
             batch = {k: v.to(self.device) for k, v in batch.items()}
             with torch.no_grad():
                 outputs = self.model(**batch)
