@@ -12,7 +12,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from sampler import DefaultSampler
+from sampler import DefaultSampler, DefaultBatchSampler
 from utils import get_logger, set_reproducibility
 
 logger = get_logger("trainer")
@@ -72,18 +72,21 @@ class Trainer:
     def build_dataloaders(
         self, train_dataset: Dataset, dev_dataset: Dataset, collate_fn: Callable
     ) -> Tuple[DataLoader, DataLoader]:
-        train_dataloader = DataLoader(
-            train_dataset,
-            batch_size=self.args.batch_size,
+        train_batch_sampler = DefaultBatchSampler(
             sampler=DefaultSampler(train_dataset, shuffle=True),
-            collate_fn=collate_fn,
+            batch_size=self.args.batch_size,
             drop_last=True,
         )
-        dev_dataloader = DataLoader(
-            dev_dataset,
-            batch_size=self.args.batch_size,
+        dev_batch_sampler = DefaultBatchSampler(
             sampler=DefaultSampler(dev_dataset, shuffle=False),
-            collate_fn=collate_fn,
+            batch_size=self.args.batch_size,
+            drop_last=False,
+        )
+        train_dataloader = DataLoader(
+            train_dataset, batch_sampler=train_batch_sampler, collate_fn=collate_fn
+        )
+        dev_dataloader = DataLoader(
+            dev_dataset, batch_sampler=dev_batch_sampler, collate_fn=collate_fn
         )
         logger.info(f"# train samples: {len(train_dataloader.dataset):,}")
         logger.info(f"# validate samples: {len(dev_dataloader.dataset):,}")
