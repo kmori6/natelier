@@ -1,7 +1,7 @@
 import json
 import os
-from argparse import ArgumentParser, Namespace
-from typing import Any, Callable, Dict, List, Tuple
+from argparse import Namespace
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 import numpy as np
 import torch
@@ -12,7 +12,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from sampler import DefaultSampler, DefaultBatchSampler
+from sampler import DefaultBatchSampler
 from utils import get_logger, set_reproducibility
 
 logger = get_logger("trainer")
@@ -28,13 +28,14 @@ class Trainer:
 
     def run(
         self,
-        train_dataset: DataLoader,
-        dev_dataset: DataLoader,
+        train_dataset: Dataset,
+        dev_dataset: Dataset,
         collate_fn: Callable[[List[Dict[str, Any]]], Dict[str, torch.Tensor]],
+        batch_sampler: Iterable = DefaultBatchSampler,
     ):
         os.makedirs(self.args.out_dir, exist_ok=True)
         train_dataloader, dev_dataloader = self.build_dataloaders(
-            train_dataset, dev_dataset, collate_fn
+            train_dataset, dev_dataset, collate_fn, batch_sampler
         )
         optimizer = self.build_optimizer()
         scaler = self.build_scaler()
@@ -70,16 +71,22 @@ class Trainer:
         self.save_train_args()
 
     def build_dataloaders(
-        self, train_dataset: Dataset, dev_dataset: Dataset, collate_fn: Callable
+        self,
+        train_dataset: Dataset,
+        dev_dataset: Dataset,
+        collate_fn: Callable,
+        batch_sampler: Iterable,
     ) -> Tuple[DataLoader, DataLoader]:
-        train_batch_sampler = DefaultBatchSampler(
-            sampler=DefaultSampler(train_dataset, shuffle=True),
+        train_batch_sampler = batch_sampler(
+            dataset=train_dataset,
             batch_size=self.args.batch_size,
+            shuffle=True,
             drop_last=True,
         )
-        dev_batch_sampler = DefaultBatchSampler(
-            sampler=DefaultSampler(dev_dataset, shuffle=False),
+        dev_batch_sampler = batch_sampler(
+            dataset=dev_dataset,
             batch_size=self.args.batch_size,
+            shuffle=False,
             drop_last=False,
         )
         train_dataloader = DataLoader(
@@ -234,20 +241,3 @@ class Trainer:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(train_log, f, indent=4, sort_keys=True)
         logger.info(f"saved the training log at {file_path}")
-
-    @staticmethod
-    def add_train_args(parser: ArgumentParser):
-        parser.add_argument("--out_dir", default="./results", type=str)
-        parser.add_argument("--train", default=False, action="store_true")
-        parser.add_argument("--test", default=False, action="store_true")
-        parser.add_argument("--enable_amp", default=False, action="store_true")
-        parser.add_argument("--checkpoint_path", default=None, type=str)
-        parser.add_argument("--batch_size", default=16, type=int)
-        parser.add_argument("--accum_grad_steps", default=4, type=int)
-        parser.add_argument("--lr", default=2e-5, type=float)
-        parser.add_argument("--label_smoothing", default=0.1, type=float)
-        parser.add_argument("--weight_decay", default=1e-2, type=float)
-        parser.add_argument("--max_norm", default=5.0, type=float)
-        parser.add_argument("--train_monitor_steps", default=50, type=int)
-        parser.add_argument("--epochs", default=3, type=int)
-        parser.add_argument("--patience", default=3, type=int)
