@@ -70,12 +70,10 @@ def main():
     parser = get_parser()
     args = get_args(parser)
 
-    tokenizer = NMTBart.get_pretrained_tokenizer(args.src_lang, args.tgt_lang)
-    collate_fn = NMTBatchCollator(args, tokenizer)
-
     if args.train:
         train_dataset = Iwslt2017Dataset(args, "train")
         dev_dataset = Iwslt2017Dataset(args, "validation")
+        tokenizer = NMTBart.get_pretrained_tokenizer(args.src_lang, args.tgt_lang)
         train_dataset.tokenize(
             tokenizer, min(args.max_length, tokenizer.model_max_length)
         )
@@ -83,7 +81,7 @@ def main():
             tokenizer, min(args.max_length, tokenizer.model_max_length)
         )
         trainer = Trainer(args, NMTBart)
-        trainer.run(train_dataset, dev_dataset, collate_fn)
+        trainer.run(train_dataset, dev_dataset, NMTBatchCollator(args, tokenizer))
 
     if args.test:
         test_dataset = Iwslt2017Dataset(args, "test")
