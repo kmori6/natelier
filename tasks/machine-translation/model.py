@@ -2,20 +2,17 @@ from argparse import Namespace
 from typing import Any, Dict
 
 import torch
-import torch.nn as nn
 
 from loss.cross_entropy import CrossEntropyLoss
 from metrics import tokens_accuracy
-from models.mbart import MbartModel
-from outputs import TrainOutputs
+from models.mbart import Mbart
+from outputs import ModelOutputs
 
 
-class NMTBart(nn.Module):
+class NMTBart(Mbart):
     def __init__(self, args: Namespace):
-        super().__init__()
-        self.vocab_size = args.vocab_size
-        self.model = MbartModel.from_pretrained()
-        self.model.freeze_embeddings()
+        super().__init__(load_pretrained_weight=True)
+        self.freeze_embeddings()
         self.loss_fn = CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     def forward(
@@ -26,14 +23,9 @@ class NMTBart(nn.Module):
         decoder_masks: torch.Tensor,
         labels: torch.Tensor,
     ) -> Dict[str, Any]:
-        logits = self.model(
+        logits = super().forward(
             encoder_tokens, encoder_masks, decoder_tokens, decoder_masks
         )
         loss = self.loss_fn(logits.view(-1, self.vocab_size), labels.view(-1))
         stats = {"loss": loss.item(), "acc": tokens_accuracy(logits.argmax(-1), labels)}
-        return TrainOutputs(loss, stats)
-
-    def translate(
-        self, tokens: torch.Tensor, beam_size: int, max_length: int
-    ) -> Dict[str, Any]:
-        return self.model.decode(tokens, beam_size, max_length)
+        return ModelOutputs(loss, stats)
