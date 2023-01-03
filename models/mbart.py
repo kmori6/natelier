@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from transformers import MBartModel
+from transformers import MBartModel, MBartTokenizerFast
 
 from .bart import BartDecoder, BartEncoder, Bart
 
@@ -222,9 +222,18 @@ class Mbart(Bart):
             else:
                 if module == "layers":
                     layer_id, sub_module = k.split(".", 3)[2:]
-                    tgt_key = f"{part}.{module}.{layer_id}.{KEY_DICT[part][module][sub_module]}"
+                    tgt_key = (
+                        f"{part}.{module}.{layer_id}."
+                        f"{KEY_DICT[part][module][sub_module]}"
+                    )
                 else:
                     module = k.split(".", 1)[-1]
                     tgt_key = f"{part}.{KEY_DICT[part][module]}"
             tgt_dict[tgt_key] = state_dict[k]
         self.load_state_dict(tgt_dict)
+
+    @staticmethod
+    def get_pretrained_tokenizer(src_lang: str, tgt_lang: str) -> MBartTokenizerFast:
+        return MBartTokenizerFast.from_pretrained(
+            "facebook/mbart-large-cc25", src_lang=src_lang, tgt_lang=tgt_lang
+        )
