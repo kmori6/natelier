@@ -20,8 +20,8 @@ class Iwslt2017Dataset(Dataset):
             )
         self.dataset = [
             {
-                "src": data["translation"][self.src_lang],
-                "tgt": data["translation"][self.tgt_lang],
+                "src_text": data["translation"][self.src_lang],
+                "tgt_text": data["translation"][self.tgt_lang],
             }
             for data in dataset
         ]
@@ -37,8 +37,8 @@ class Iwslt2017Dataset(Dataset):
             enumerate(self.dataset), total=len(self.dataset), desc="Tokenizing"
         ):
             results = tokenizer(
-                sample["src"],
-                text_target=sample["tgt"],
+                sample["src_text"],
+                text_target=sample["tgt_text"],
                 max_length=max_length,
                 truncation=True,
                 return_tensors="pt",
@@ -48,5 +48,3 @@ class Iwslt2017Dataset(Dataset):
                 "decoder_tokens": torch.roll(results["labels"][0], shifts=1),
                 "labels": results["labels"][0],
             }
-
-        return None
