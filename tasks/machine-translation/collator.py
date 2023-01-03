@@ -1,49 +1,61 @@
 from argparse import Namespace
-from typing import Dict, List, Any
+from typing import Dict, List
+
 import torch
-from transformers import AutoTokenizer
+from torch.nn.utils.rnn import pad_sequence
+from transformers import PreTrainedTokenizerFast
+
+from utils import fill_tokens
 
 
 class NMTBatchCollator:
-    def __init__(self, args: Namespace, return_test_encodings: bool = False):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name, src_lang=args.src_lang, tgt_lang=args.tgt_lang
-        )
-        self.max_length = min(args.max_length, self.tokenizer.model_max_length)
+    def __init__(
+        self,
+        args: Namespace,
+        tokenizer: PreTrainedTokenizerFast,
+        return_test_encodings: bool = False,
+        ignore_token_id: int = -100,
+    ):
+        self.tokenizer = tokenizer
+        self.max_length = min(args.max_length, tokenizer.model_max_length)
         self.return_test_encodings = return_test_encodings
-        self.pad_token_id = self.tokenizer.pad_token_id
-        self.src_lang_id = self.tokenizer.lang_code_to_id[args.src_lang]
-        self.tgt_lang_id = self.tokenizer.lang_code_to_id[args.tgt_lang]
+        self.pad_token_id = tokenizer.pad_token_id
+        self.ignore_token_id = ignore_token_id
 
-    def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        encodings = self.tokenizer(
-            [data["src_text"] for data in batch],
-            text_target=[data["tgt_text"] for data in batch],
-            padding=True,
-            max_length=self.max_length,
-            truncation=True,
-            return_tensors="pt",
+    def __call__(self, batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        encoder_tokens = pad_sequence(
+            [sample["encoder_tokens"] for sample in batch],
+            batch_first=True,
+            padding_value=self.pad_token_id,
+        )
+        decoder_tokens = pad_sequence(
+            [sample["decoder_tokens"] for sample in batch],
+            batch_first=True,
+            padding_value=self.pad_token_id,
+        )
+        labels = pad_sequence(
+            [sample["labels"] for sample in batch],
+            batch_first=True,
+            padding_value=self.ignore_token_id,
+        )
+        encoder_masks = torch.ones_like(encoder_tokens).masked_fill(
+            encoder_tokens == self.pad_token_id, 0
+        )
+        decoder_masks = torch.ones_like(decoder_tokens).masked_fill(
+            decoder_tokens == self.pad_token_id, 0
         )
         if self.return_test_encodings:
             return {
                 "tokens": encodings["input_ids"],
-                "labels": encodings["labels"].masked_fill(
-                    encodings["labels"] == 1, -100
+                "labels": fill_tokens(
+                    encodings["labels"], self.pad_token_id, self.ignore_token_id
                 ),
             }
         else:
-            decoder_tokens = encodings["labels"].masked_fill(
-                encodings["labels"] == self.tgt_lang_id, self.pad_token_id
-            )
-            decoder_tokens = decoder_tokens.roll(1, dims=1)
-            decoder_tokens[:, 0] = self.tgt_lang_id
-            decoder_masks = (decoder_tokens != self.pad_token_id).long()
             return {
-                "encoder_tokens": encodings["input_ids"],
-                "encoder_masks": encodings["attention_mask"],
+                "encoder_tokens": encoder_tokens,
+                "encoder_masks": encoder_masks,
                 "decoder_tokens": decoder_tokens,
                 "decoder_masks": decoder_masks,
-                "labels": encodings["labels"].masked_fill(
-                    encodings["labels"] == 1, -100
-                ),
+                "labels": labels,
             }
