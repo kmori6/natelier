@@ -1,22 +1,23 @@
-import argparse
-from test import test
+from argparse import ArgumentParser, Namespace
+from evaluate import test
 from typing import Dict
 
 import sacrebleu
 import torch
-from collator import NMTBatchCollator
-from data import Iwslt2017Dataset
+from dataset import Iwslt2017Dataset
 from model import NMTBart
 from tokenizer import NMTTokenizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from collator import NMTBatchCollator
+from sampler import LengthGroupBatchSampler
 from train import Trainer
+from utils import get_parser
 
 
-def add_specific_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument("--dataset", default="iwslt2017-en-ja", type=str)
-    parser.add_argument("--test_ratio", default=None, type=int)
+def get_args(parser: ArgumentParser) -> Namespace:
+    parser.add_argument("--test_percent", default=100, type=int)
     parser.add_argument("--model_name", default="facebook/mbart-large-cc25", type=str)
     parser.add_argument("--train_tokenizer", default=False, action="store_true")
     parser.add_argument("--src_lang", default="en_XX", type=str)
@@ -24,6 +25,8 @@ def add_specific_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--vocab_size", default=250027, type=int)
     parser.add_argument("--beam_size", default=5, type=int)
     parser.add_argument("--max_length", default=128, type=int)
+    args = parser.parse_args()
+    return args
 
 
 def test_steps(
@@ -64,20 +67,26 @@ def test_steps(
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    Trainer.add_train_args(parser)
-    add_specific_arguments(parser)
-    args = parser.parse_args()
+    parser = get_parser()
+    args = get_args(parser)
 
-    train_dataset = Iwslt2017Dataset(args, "train")
-    dev_dataset = Iwslt2017Dataset(args, "validation")
-    test_dataset = Iwslt2017Dataset(args, "test")
+    tokenizer = NMTBart.get_pretrained_tokenizer(args.src_lang, args.tgt_lang)
+    collate_fn = NMTBatchCollator(args, tokenizer)
 
     if args.train:
+        train_dataset = Iwslt2017Dataset(args, "train")
+        dev_dataset = Iwslt2017Dataset(args, "validation")
+        train_dataset.tokenize(
+            tokenizer, min(args.max_length, tokenizer.model_max_length)
+        )
+        dev_dataset.tokenize(
+            tokenizer, min(args.max_length, tokenizer.model_max_length)
+        )
         trainer = Trainer(args, NMTBart)
-        trainer.run(train_dataset, dev_dataset, NMTBatchCollator(args))
+        trainer.run(train_dataset, dev_dataset, collate_fn)
 
     if args.test:
+        test_dataset = Iwslt2017Dataset(args, "test")
         if args.batch_size > 1:
             setattr(args, "batch_size", 1)
         tokenizer = NMTTokenizer(args.out_dir + "/tokenizer/tokenizer.model")
