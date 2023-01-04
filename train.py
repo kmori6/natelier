@@ -119,6 +119,7 @@ class Trainer:
                 raise ValueError(
                     f"'epochs' shoule be more than checkpoint ({self.start_epoch})"
                 )
+            logger.info(f"loaded the checkpoint from {self.args.checkpoint_path}")
         else:
             self.best_loss = float("inf")
             self.start_epoch = 1
@@ -126,9 +127,10 @@ class Trainer:
     def display_model_stats(self):
         params = sum(p.numel() for p in self.model.parameters())
         trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        percent = 100 * trainable / params
         logger.info(self.model)
         logger.info(f"# model parameters: {params:,}")
-        logger.info(f"# trainable parameters: {trainable:,}")
+        logger.info(f"# trainable parameters: {trainable:,} ({percent} %)")
 
     def save_train_args(self):
         with open(self.args.out_dir + "/train_args.json", "w", encoding="utf-8") as f:
