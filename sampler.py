@@ -33,3 +33,25 @@ class DefaultBatchSampler:
             indices = indices[:-1]
         iterator = iter([array.tolist() for array in indices])
         return iterator
+
+
+class LengthGroupBatchSampler(DefaultBatchSampler):
+    def __init__(
+        self, dataset: Dataset, batch_size: int, shuffle: bool, drop_last: bool
+    ):
+        super().__init__(dataset, batch_size, shuffle, drop_last)
+
+    def __iter__(self) -> Iterator[List[int]]:
+        lengths = [
+            len(self.dataset[i]["encoder_tokens"]) for i in range(len(self.dataset))
+        ]
+        indices = np.split(
+            np.argsort(lengths)[::-1],
+            np.arange(self.batch_size, len(self.dataset), self.batch_size),
+        )
+        if self.drop_last and len(self.dataset) % self.batch_size > 0:
+            indices = indices[:-1]
+        if self.shuffle:
+            random.shuffle(indices)
+        iterator = iter([array.tolist() for array in indices])
+        return iterator
