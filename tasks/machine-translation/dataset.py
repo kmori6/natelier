@@ -32,7 +32,7 @@ class Iwslt2017Dataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, str]:
         return self.dataset[idx]
 
-    def tokenize(self, tokenizer: Callable, max_length: int):
+    def tokenize(self, tokenizer: Callable, max_length: int, mbart: bool = False):
         for i, sample in tqdm(
             enumerate(self.dataset), total=len(self.dataset), desc="Tokenizing"
         ):
@@ -43,8 +43,14 @@ class Iwslt2017Dataset(Dataset):
                 truncation=True,
                 return_tensors="pt",
             )
+            if mbart:
+                decoder_tokens = torch.roll(results["labels"][0], shifts=1)
+                labels = results["labels"][0]
+            else:
+                decoder_tokens = results["labels"][0][:-1]
+                labels = results["labels"][0][1:]
             self.dataset[i] = {
                 "encoder_tokens": results["input_ids"][0],
-                "decoder_tokens": torch.roll(results["labels"][0], shifts=1),
-                "labels": results["labels"][0],
+                "decoder_tokens": decoder_tokens,
+                "labels": labels,
             }
