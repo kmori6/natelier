@@ -27,6 +27,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--checkpoint_path", default=None, type=str)
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--accum_grad_steps", default=4, type=int)
+    parser.add_argument(
+        "--optimizer", default="adamw", type=str, choices=["adam", "adamw"]
+    )
     parser.add_argument("--lr", default=2e-5, type=float)
     parser.add_argument("--label_smoothing", default=0.1, type=float)
     parser.add_argument("--weight_decay", default=1e-2, type=float)
