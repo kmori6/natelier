@@ -15,7 +15,7 @@ from tqdm import tqdm
 from sampler import DefaultBatchSampler
 from utils import get_logger, set_reproducibility
 
-logger = get_logger("trainer")
+logger = get_logger(__name__)
 
 
 class Trainer:
@@ -41,6 +41,10 @@ class Trainer:
         scaler = self.build_scaler()
         self.load_checkpoint(optimizer, scaler)
         self.display_model_stats()
+        logger.info(f"# train samples: {len(train_dataset):,}")
+        logger.info(f"# validate samples: {len(dev_dataset):,}")
+        logger.info(f"# train batches: {len(train_dataloader):,}")
+        logger.info(f"# validate batches: {len(dev_dataloader):,}")
         log = []
         for epoch in range(self.start_epoch, self.args.epochs + 1):
             # train
@@ -90,19 +94,39 @@ class Trainer:
             drop_last=False,
         )
         train_dataloader = DataLoader(
-            train_dataset, batch_sampler=train_batch_sampler, collate_fn=collate_fn
+            train_dataset,
+            batch_sampler=train_batch_sampler,
+            collate_fn=collate_fn,
+            num_workers=2,
         )
         dev_dataloader = DataLoader(
-            dev_dataset, batch_sampler=dev_batch_sampler, collate_fn=collate_fn
+            dev_dataset,
+            batch_sampler=dev_batch_sampler,
+            collate_fn=collate_fn,
+            num_workers=2,
         )
-        logger.info(f"# train samples: {len(train_dataloader.dataset):,}")
-        logger.info(f"# validate samples: {len(dev_dataloader.dataset):,}")
         return train_dataloader, dev_dataloader
 
     def build_optimizer(self) -> optim.Optimizer:
-        return optim.AdamW(
-            self.model.parameters(), self.args.lr, weight_decay=self.args.weight_decay
+        if self.args.optimizer == "adam":
+            optimizer = optim.Adam(
+                self.model.parameters(),
+                self.args.lr,
+                weight_decay=self.args.weight_decay,
+            )
+        elif self.args.optimizer == "adamw":
+            optimizer = optim.AdamW(
+                self.model.parameters(),
+                self.args.lr,
+                weight_decay=self.args.weight_decay,
+            )
+        else:
+            raise ValueError("optimizer should be adam or adamw")
+        logger.info(
+            f"built optimizer: {self.args.optimizer} "
+            f"(lr: {self.args.lr}, weight_decay: {self.args.weight_decay})"
         )
+        return optimizer
 
     def build_scaler(self) -> GradScaler:
         return GradScaler(enabled=self.args.enable_amp)
@@ -130,7 +154,7 @@ class Trainer:
         percent = 100 * trainable / params
         logger.info(self.model)
         logger.info(f"# model parameters: {params:,}")
-        logger.info(f"# trainable parameters: {trainable:,} ({percent} %)")
+        logger.info(f"# trainable parameters: {trainable:,} ({percent:.1f} %)")
 
     def save_train_args(self):
         with open(self.args.out_dir + "/train_args.json", "w", encoding="utf-8") as f:
