@@ -165,7 +165,7 @@ class Mbart(Bart):
         d_ff: int = 4096,
         num_attention_heads: int = 16,
         num_layers: int = 12,
-        dropout_rate: float = 0.0,
+        dropout_rate: float = 0.3,
         bos_id: int = 0,
         eos_id: int = 2,
         padding_id: int = 1,
