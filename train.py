@@ -98,12 +98,14 @@ class Trainer:
             batch_sampler=train_batch_sampler,
             collate_fn=collate_fn,
             num_workers=2,
+            pin_memory=True,
         )
         dev_dataloader = DataLoader(
             dev_dataset,
             batch_sampler=dev_batch_sampler,
             collate_fn=collate_fn,
             num_workers=2,
+            pin_memory=True,
         )
         return train_dataloader, dev_dataloader
 
@@ -133,7 +135,11 @@ class Trainer:
 
     def load_checkpoint(self, optimizer: optim.Optimizer, scaler: GradScaler):
         if self.args.checkpoint_path:
-            checkpoint = torch.load(self.args.checkpoint_path)
+            # load the checkpoint onto the cpu
+            # https://discuss.pytorch.org/t/out-of-memory-error-when-resume-training-even-though-my-gpu-is-empty/30757
+            checkpoint = torch.load(
+                self.args.checkpoint_path, map_location=torch.device("cpu")
+            )
             self.model.load_state_dict(checkpoint["model_state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scaler.load_state_dict(checkpoint["scaler"])
