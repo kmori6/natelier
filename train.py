@@ -34,17 +34,13 @@ class Trainer:
         batch_sampler: Iterable = DefaultBatchSampler,
     ):
         os.makedirs(self.args.out_dir, exist_ok=True)
-        train_dataloader, dev_dataloader = self.build_dataloaders(
-            train_dataset, dev_dataset, collate_fn, batch_sampler
-        )
         optimizer = self.build_optimizer()
         scaler = self.build_scaler()
         self.load_checkpoint(optimizer, scaler)
         self.display_model_stats()
-        logger.info(f"# train samples: {len(train_dataset):,}")
-        logger.info(f"# validate samples: {len(dev_dataset):,}")
-        logger.info(f"# train batches: {len(train_dataloader):,}")
-        logger.info(f"# validate batches: {len(dev_dataloader):,}")
+        train_dataloader, dev_dataloader = self.build_dataloaders(
+            train_dataset, dev_dataset, collate_fn, batch_sampler
+        )
         log = []
         for epoch in range(self.start_epoch, self.args.epochs + 1):
             # train
@@ -81,18 +77,24 @@ class Trainer:
         collate_fn: Callable,
         batch_sampler: Iterable,
     ) -> Tuple[DataLoader, DataLoader]:
+        logger.info(f"# train samples: {len(train_dataset):,}")
+        logger.info(f"# validate samples: {len(dev_dataset):,}")
         train_batch_sampler = batch_sampler(
             dataset=train_dataset,
             batch_size=self.args.batch_size,
+            max_length=self.args.max_batch_length,
             shuffle=True,
             drop_last=True,
         )
         dev_batch_sampler = batch_sampler(
             dataset=dev_dataset,
             batch_size=self.args.batch_size,
+            max_length=self.args.max_batch_length,
             shuffle=False,
             drop_last=False,
         )
+        logger.info(f"built train batch sampler: {train_batch_sampler}")
+        logger.info(f"built validation batch sampler: {dev_batch_sampler}")
         train_dataloader = DataLoader(
             train_dataset,
             batch_sampler=train_batch_sampler,
@@ -107,6 +109,8 @@ class Trainer:
             num_workers=self.args.num_dataloader_workers,
             pin_memory=self.args.pin_dataloader_memory,
         )
+        logger.info(f"built train dataloader ({len(train_dataloader):,} batches)")
+        logger.info(f"built validate dataloader ({len(dev_dataloader):,} batches)")
         return train_dataloader, dev_dataloader
 
     def build_optimizer(self) -> optim.Optimizer:
@@ -135,11 +139,7 @@ class Trainer:
 
     def load_checkpoint(self, optimizer: optim.Optimizer, scaler: GradScaler):
         if self.args.checkpoint_path:
-            # load the checkpoint onto the cpu
-            # https://discuss.pytorch.org/t/out-of-memory-error-when-resume-training-even-though-my-gpu-is-empty/30757
-            checkpoint = torch.load(
-                self.args.checkpoint_path, map_location=torch.device("cpu")
-            )
+            checkpoint = torch.load(self.args.checkpoint_path, map_location=self.device)
             self.model.load_state_dict(checkpoint["model_state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             scaler.load_state_dict(checkpoint["scaler"])
