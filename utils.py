@@ -24,6 +24,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument("--train", default=False, action="store_true")
     parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument("--enable_amp", default=False, action="store_true")
+    parser.add_argument("--pin_dataloader_memory", default=False, action="store_true")
+    parser.add_argument("--num_dataloader_workers", default=2, type=int)
     parser.add_argument("--checkpoint_path", default=None, type=str)
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--accum_grad_steps", default=4, type=int)

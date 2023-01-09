@@ -97,15 +97,15 @@ class Trainer:
             train_dataset,
             batch_sampler=train_batch_sampler,
             collate_fn=collate_fn,
-            num_workers=2,
-            pin_memory=True,
+            num_workers=self.args.num_dataloader_workers,
+            pin_memory=self.args.pin_dataloader_memory,
         )
         dev_dataloader = DataLoader(
             dev_dataset,
             batch_sampler=dev_batch_sampler,
             collate_fn=collate_fn,
-            num_workers=2,
-            pin_memory=True,
+            num_workers=self.args.num_dataloader_workers,
+            pin_memory=self.args.pin_dataloader_memory,
         )
         return train_dataloader, dev_dataloader
 
@@ -195,8 +195,8 @@ class Trainer:
                 optimizer.zero_grad()
             if step % self.args.train_monitor_steps == 0:
                 message = (
-                    f"epoch: {current_epoch}/{self.args.epochs}"
-                    f" - step: {step}/{len(train_dataloader)}"
+                    f"epoch: {current_epoch:,}/{self.args.epochs:,}"
+                    f" - step: {step:,}/{len(train_dataloader):,}"
                 )
                 for k, v in outputs.stats.items():
                     message += f" - {k}: {v:.3f}"
